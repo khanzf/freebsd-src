@@ -350,12 +350,6 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 	 */
 	unsigned char buf[263];
 	unsigned char *ptr;
-	struct addrinfo hint, *res = NULL;
-
-	bzero(&hint, sizeof(struct addrinfo));
-
-	hint.ai_family = PF_UNSPEC;
-	hint.ai_flags = AI_NUMERICHOST;
 
 	if (verbose)
 		fetch_info("Initializing SOCKS5 connection: %s:%d", host, port);
@@ -392,30 +386,15 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 	}
 
 	/* Send Request */
-	getaddrinfo(host, NULL, &hint, &res);
 	ptr = buf;
 	*ptr++ = 0x05;
 	*ptr++ = 0x01;
 	*ptr++ = 0x00;
-	if (res && res->ai_family == AF_INET) {
-		printf("IPv4\n");
-		*ptr++ = 0x01;
-		strncpy(ptr, host, strlen(host));
-		ptr = ptr + strlen(host);
-	}
-	else if (res && res->ai_family == AF_INET6) {
-		printf("IPv6\n");
-		*ptr++ = 0x04;
-		strncpy(ptr, host, strlen(host));
-		ptr = ptr + strlen(host);
-	}
-	else {
-		printf("Hostname\n");
-		*ptr++ = 0x03;
-		*ptr++ = strlen(host);
-		strncpy(ptr, host, strlen(host));
-		ptr = ptr + strlen(host);
-	}
+	/* Encode all targets as a hostname to avoid DNS leaks */
+	*ptr++ = 0x03;
+	*ptr++ = strlen(host);
+	strncpy(ptr, host, strlen(host));
+	ptr = ptr + strlen(host);
 
 	port = htons(port);
 	*ptr++ = port & 0x00ff;
@@ -479,11 +458,9 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 		break;
 	}
 
-	freeaddrinfo(res);
 	return (1);
 
 fail:
-	freeaddrinfo(res);
 	return (0);
 
 }
