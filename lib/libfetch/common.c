@@ -543,6 +543,7 @@ fetch_connect(const char *host, int port, int af, int verbose)
 	if (!sockshost) {
 		/* resolve server address */
 		if (verbose)
+			fetch_info("resolving server address: %s:%d", host, port);
 		if ((sais = fetch_resolve(host, port, af)) == NULL)
 			goto fail;
 
