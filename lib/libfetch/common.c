@@ -398,16 +398,19 @@ fetch_socks5_connection(conn_t *conn, const char *sockshost, int socksport, int 
 	*ptr++ = 0x01;
 	*ptr++ = 0x00;
 	if (res && res->ai_family == AF_INET) {
+		printf("IPv4\n");
 		*ptr++ = 0x01;
 		strncpy(ptr, sockshost, strlen(sockshost));
 		ptr = ptr + strlen(sockshost);
 	}
-	else if (res && res->ai_family == AF_INET) {
+	else if (res && res->ai_family == AF_INET6) {
+		printf("IPv6\n");
 		*ptr++ = 0x04;
 		strncpy(ptr, sockshost, strlen(sockshost));
 		ptr = ptr + strlen(sockshost);
 	}
 	else {
+		printf("Hostname\n");
 		*ptr++ = 0x03;
 		*ptr++ = strlen(sockshost);
 		strncpy(ptr, sockshost, strlen(sockshost));
