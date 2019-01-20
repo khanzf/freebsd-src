@@ -338,10 +338,10 @@ fetch_bind(int sd, int af, const char *addr)
 
 /*
  * SOCKS5 connection initiation, based on RFC 1928
- * Does not implement authentication
+ * Does not implement authentication.
  */
 int
-fetch_socks5_connection(conn_t *conn, const char *sockshost, int socksport, int verbose)
+fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 {
 	/*
 	 * Size is based on largest packet prefix (4 bytes) +
@@ -358,7 +358,7 @@ fetch_socks5_connection(conn_t *conn, const char *sockshost, int socksport, int 
 	hint.ai_flags = AI_NUMERICHOST;
 
 	if (verbose)
-		fetch_info("Initializing SOCKS5 connection: %s:%d", sockshost, socksport);
+		fetch_info("Initializing SOCKS5 connection: %s:%d", host, port);
 
 	/* Connection initialization */
 	ptr = buf;
@@ -392,7 +392,7 @@ fetch_socks5_connection(conn_t *conn, const char *sockshost, int socksport, int 
 	}
 
 	/* Send Request */
-	getaddrinfo(sockshost, NULL, &hint, &res);
+	getaddrinfo(host, NULL, &hint, &res);
 	ptr = buf;
 	*ptr++ = 0x05;
 	*ptr++ = 0x01;
@@ -400,26 +400,26 @@ fetch_socks5_connection(conn_t *conn, const char *sockshost, int socksport, int 
 	if (res && res->ai_family == AF_INET) {
 		printf("IPv4\n");
 		*ptr++ = 0x01;
-		strncpy(ptr, sockshost, strlen(sockshost));
-		ptr = ptr + strlen(sockshost);
+		strncpy(ptr, host, strlen(host));
+		ptr = ptr + strlen(host);
 	}
 	else if (res && res->ai_family == AF_INET6) {
 		printf("IPv6\n");
 		*ptr++ = 0x04;
-		strncpy(ptr, sockshost, strlen(sockshost));
-		ptr = ptr + strlen(sockshost);
+		strncpy(ptr, host, strlen(host));
+		ptr = ptr + strlen(host);
 	}
 	else {
 		printf("Hostname\n");
 		*ptr++ = 0x03;
-		*ptr++ = strlen(sockshost);
-		strncpy(ptr, sockshost, strlen(sockshost));
-		ptr = ptr + strlen(sockshost);
+		*ptr++ = strlen(host);
+		strncpy(ptr, host, strlen(host));
+		ptr = ptr + strlen(host);
 	}
 
-	socksport = htons(socksport);
-	*ptr++ = socksport & 0x00ff;
-	*ptr++ = (socksport & 0xff00) >> 8;
+	port = htons(port);
+	*ptr++ = port & 0x00ff;
+	*ptr++ = (port & 0xff00) >> 8;
 
 	if (fetch_write(conn, buf, ptr - buf) != ptr - buf) {
 		fprintf(stderr, "SOCKS5: Failed to request.\n");
@@ -492,7 +492,7 @@ fail:
  * Perform SOCKS5 initialization
  */
 int
-fetch_socks5_env(char **host, int *port)
+fetch_socks5_getenv(char **host, int *port)
 {
 	char *socks5env, *endptr, *ext;
 
@@ -560,7 +560,7 @@ fetch_connect(const char *host, int port, int af, int verbose)
 	DEBUGF("---> %s:%d\n", host, port);
 
 	/* Check if SOCKS5_PROXY env variable is set */
-	if(!fetch_socks5_env(&sockshost, &socksport))
+	if(!fetch_socks5_getenv(&sockshost, &socksport))
 		goto fail;
 
 	/* Not using SOCKS5 proxy */
@@ -625,7 +625,7 @@ fetch_connect(const char *host, int port, int af, int verbose)
 		goto syserr;
 
 	if (sockshost)
-		if (!fetch_socks5_connection(conn, host, port, verbose))
+		if (!fetch_socks5_init(conn, host, port, verbose))
 			goto fail;
 	if (cais != NULL)
 		freeaddrinfo(cais);
