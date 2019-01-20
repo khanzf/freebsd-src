@@ -338,7 +338,7 @@ fetch_bind(int sd, int af, const char *addr)
 
 /*
  * SOCKS5 connection initiation, based on RFC 1928
- * Does not implement authentication.
+ * Default DNS resolution over SOCKS5
  */
 int
 fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
@@ -462,7 +462,6 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 
 fail:
 	return (0);
-
 }
 
 /*
