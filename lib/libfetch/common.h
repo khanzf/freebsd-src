@@ -70,6 +70,27 @@ struct fetcherr {
 	const char	*string;
 };
 
+/* For SOCKS header size */
+#define HEAD_SIZE	4
+#define FQDN_SIZE	256
+#define PACK_SIZE	1
+#define PORT_SIZE	2
+#define BUFF_SIZE	HEAD_SIZE + FQDN_SIZE + PACK_SIZE + PORT_SIZE
+
+/* SOCKS5 Request Header */
+#define SOCKS_VERSION		0x05
+/* SOCKS5 CMD */
+#define SOCKS_CONNECTION	0x01
+#define SOCKS_BIND		0x02
+#define SOCKS_UDP		0x03
+#define SOCKS_NOMETHODS		0xFF
+/* SOCKS5 Reserved */
+#define SOCKS_RSV		0x00
+/* SOCKS5 Address Type */
+#define SOCKS_ATYP_IPV4		0x01
+#define SOCKS_ATYP_DOMAINNAME	0x03
+#define SOCKS_ATYP_IPV6		0x04
+
 /* for fetch_writev */
 struct iovec;
 

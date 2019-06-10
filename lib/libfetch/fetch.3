@@ -669,11 +669,11 @@ Same as
 .Ev NO_PROXY ,
 for compatibility.
 .It Ev SOCKS5_PROXY
-Uses SOCKS version 5 to make connection. The format must be
-the IP or hostname followed by a colon for the port. IPv6
-addresses must enclose the address in brackets. If not port
-is specified, the default is 1080. This setting will supercede
-a connection to an HTTP_PROXY.
+Uses SOCKS version 5 to make connection.
+The format must be the IP or hostname followed by a colon for the port.
+IPv6 addresses must enclose the address in brackets.
+If no port is specified, the default is 1080.
+This setting will supercede a connection to an HTTP_PROXY.
 .It Ev SSL_ALLOW_SSL3
 Allow SSL version 3 when negotiating the connection (not recommended).
 .It Ev SSL_CA_CERT_FILE
@@ -732,16 +732,20 @@ as follows:
 NO_PROXY=localhost,127.0.0.1
 .Ed
 .Pp
-To use a SOCKS5 proxy, set the SOCKS5_PROXY environment variable to a
-valid host or IP followed by an optional colon and the port. IPv6 addresses
-must be enclosed in brackets. The following are examples of valid settings:
-.Pp
-.Dl SOCKS5_PROXY=proxy.example.com
-.Dl SOCKS5_PROXY=proxy.example.com:1080
-.Dl SOCKS5_PROXY=192.0.2.0
-.Dl SOCKS5_PROXY=198.51.100.0:1080
-.Dl SOCKS5_PROXY=[2001:db8::1]
-.Dl SOCKS5_PROXY=[2001:db8::2]:1080
+To use a SOCKS5 proxy, set the
+.Ev SOCKS5_PROXY
+environment variable to a
+valid host or IP followed by an optional colon and the port.
+IPv6 addresses must be enclosed in brackets.
+The following are examples of valid settings:
+.Bd -literal -offset indent
+SOCKS5_PROXY=proxy.example.com
+SOCKS5_PROXY=proxy.example.com:1080
+SOCKS5_PROXY=192.0.2.0
+SOCKS5_PROXY=198.51.100.0:1080
+SOCKS5_PROXY=[2001:db8::1]
+SOCKS5_PROXY=[2001:db8::2]:1080
+.Ed
 .Pp
 Access HTTPS website without any certificate verification whatsoever:
 .Bd -literal -offset indent

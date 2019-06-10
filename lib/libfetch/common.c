@@ -348,7 +348,7 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 	 * Largest FQDN (256) + one byte size (1) +
 	 * Port (2)
 	 */
-	unsigned char buf[263];
+	unsigned char buf[BUFF_SIZE];
 	unsigned char *ptr;
 
 	if (verbose)
@@ -356,9 +356,9 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 
 	/* Connection initialization */
 	ptr = buf;
-	*ptr++ = 0x05;
-	*ptr++ = 0x01;
-	*ptr++ = 0x00;
+	*ptr++ = SOCKS_VERSION_5;
+	*ptr++ = SOCKS_CONNECTION;
+	*ptr++ = SOCKS_RSV;
 
 	if (fetch_write(conn, buf, 3) != 3) {
 		fprintf(stderr, "SOCKS5: Failed to send selection method.\n");
@@ -372,11 +372,11 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 	}
 
 	ptr = buf;
-	if (ptr[0] != 0x05) {
+	if (ptr[0] != SOCKS_VERSION_5) {
 		fprintf(stderr, "SOCKS5: Currently only version 5 is implemented.\n");
 		goto fail;
 	}
-	if (ptr[1] == 0xFF) {
+	if (ptr[1] == SOCKS_NOMETHODS) {
 		fprintf(stderr, "SOCKS5: No acceptable methods. Disconnecting.\n");
 		goto fail;
 	}
@@ -386,12 +386,15 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 	}
 
 	/* Send Request */
-	ptr = buf;
-	*ptr++ = 0x05;
-	*ptr++ = 0x01;
-	*ptr++ = 0x00;
+	*ptr++ = SOCKS_VERSION_5;
+	*ptr++ = SOCKS_CONNECTION;
+	*ptr++ = SOCKS_RSV;
 	/* Encode all targets as a hostname to avoid DNS leaks */
-	*ptr++ = 0x03;
+	*ptr++ = SOCKS_ATYP_DOMAINNAME;
+	if (strlen(host) > FQDN_SIZE) {
+		fprintf(stderr, "Hostname above 256 bytes, exiting.\n");
+		goto fail;
+	}
 	*ptr++ = strlen(host);
 	strncpy(ptr, host, strlen(host));
 	ptr = ptr + strlen(host);
@@ -406,13 +409,13 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 	}
 
 	/* BND.ADDR is variable length, read the largest on non-blocking socket */
-	if (!fetch_read(conn, buf, 263)) {
+	if (!fetch_read(conn, buf, BUFF_SIZE)) {
 		fprintf(stderr, "SOCKS5: Failed to receive reply.\n");
 		goto fail;
 	}
 
 	ptr = buf;
-	if (*ptr++ != 0x05) {
+	if (*ptr++ != SOCKS_VERSION_5) {
 		fprintf(stderr, "SOCKS5: Server responded with a non-version 5 response.\n");
 		goto fail;
 	}
@@ -423,39 +426,30 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 	case 0x01:
 		fprintf(stderr, "SOCKS5: General server failure\n");
 		goto fail;
-		break;
 	case 0x02:
 		fprintf(stderr, "SOCKS5: Connection not allowed by ruleset.\n");
 		goto fail;
-		break;
 	case 0x03:
 		fprintf(stderr, "SOCKS5: Network unreachable.\n");
 		goto fail;
-		break;
 	case 0x04:
 		fprintf(stderr, "SOCKS5: Host unreachable.\n");
 		goto fail;
-		break;
 	case 0x05:
 		fprintf(stderr, "SOCKS5: Connection refused.\n");
 		goto fail;
-		break;
 	case 0x06:
 		fprintf(stderr, "SOCKS5: TTL expired.\n");
 		goto fail;
-		break;
 	case 0x07:
 		fprintf(stderr, "SOCKS5: Command not supported.\n");
 		goto fail;
-		break;
 	case 0x08:
-		fprintf(stderr, "SOCKS: Address type not supported.\n");
+		fprintf(stderr, "SOCKS5: Address type not supported.\n");
 		goto fail;
-		break;
 	default:
 		fprintf(stderr, "SOCKS5: Unspecified failure.\n");
 		goto fail;
-		break;
 	}
 
 	return (1);
@@ -482,6 +476,8 @@ fetch_socks5_getenv(char **host, int *port)
 	if (socks5env[0] == '[') {
 		if (socks5env[strlen(socks5env)-1] == ']') {
 			*host = strndup(socks5env, strlen(socks5env));
+			if (*host == NULL)
+				goto fail;
 			*port = 1080; /* Default port as defined in RFC1928 */
 		}
 		else {
@@ -493,6 +489,8 @@ fetch_socks5_getenv(char **host, int *port)
 			}
 			ext=ext+1;
 			*host = strndup(socks5env, (ext)-(socks5env));
+			if (*host == NULL)
+				goto fail;
 			*port = strtoimax(ext+1, (char **)&endptr, 10);
 			if (*port == 0 && errno == EINVAL) {
 				fprintf(stderr, "Bad SOCKS5_PROXY port: %s\n", socks5env);
@@ -508,6 +506,8 @@ fetch_socks5_getenv(char **host, int *port)
 		}
 		else {
 			*host = strndup(socks5env, ext-socks5env);
+			if (*host == NULL)
+				goto fail;
 			*port = strtoimax(ext+1, (char **)&endptr, 10);
 			if (*port == 0 && errno == EINVAL) {
 				fprintf(stderr, "Bad SOCKS5_PROXY port: %s\n", socks5env);
@@ -517,6 +517,10 @@ fetch_socks5_getenv(char **host, int *port)
 	}
 
 	return (2);
+
+fail:
+	fprintf(stderr, "Failure to allocate memory, exiting.\n");
+	return (0);
 }
 
 
