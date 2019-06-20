@@ -421,30 +421,30 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 	}
 
 	switch(*ptr++) {
-	case 0x00:
+	case SOCKS_SUCCESS:
 		break;
-	case 0x01:
+	case SOCKS_GENERAL_FAILURE:
 		fprintf(stderr, "SOCKS5: General server failure\n");
 		goto fail;
-	case 0x02:
+	case SOCKS_CONNECTION_NOT_ALLOWED:
 		fprintf(stderr, "SOCKS5: Connection not allowed by ruleset.\n");
 		goto fail;
-	case 0x03:
+	case SOCKS_NETWORK_UNREACHABLE:
 		fprintf(stderr, "SOCKS5: Network unreachable.\n");
 		goto fail;
-	case 0x04:
+	case SOCKS_HOST_UNREACHABLE:
 		fprintf(stderr, "SOCKS5: Host unreachable.\n");
 		goto fail;
-	case 0x05:
+	case SOCKS_CONNECTION_REFUSED:
 		fprintf(stderr, "SOCKS5: Connection refused.\n");
 		goto fail;
-	case 0x06:
+	case SOCKS_TTL_EXPIRED:
 		fprintf(stderr, "SOCKS5: TTL expired.\n");
 		goto fail;
-	case 0x07:
+	case SOCKS_COMMAND_NOT_SUPPORTED:
 		fprintf(stderr, "SOCKS5: Command not supported.\n");
 		goto fail;
-	case 0x08:
+	case SOCKS_ADDRESS_NOT_SUPPORTED:
 		fprintf(stderr, "SOCKS5: Address type not supported.\n");
 		goto fail;
 	default:

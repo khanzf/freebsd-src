@@ -78,7 +78,7 @@ struct fetcherr {
 #define BUFF_SIZE	HEAD_SIZE + FQDN_SIZE + PACK_SIZE + PORT_SIZE
 
 /* SOCKS5 Request Header */
-#define SOCKS_VERSION		0x05
+#define SOCKS_VERSION_5		0x05
 /* SOCKS5 CMD */
 #define SOCKS_CONNECTION	0x01
 #define SOCKS_BIND		0x02
@@ -90,6 +90,16 @@ struct fetcherr {
 #define SOCKS_ATYP_IPV4		0x01
 #define SOCKS_ATYP_DOMAINNAME	0x03
 #define SOCKS_ATYP_IPV6		0x04
+/* SOCKS5 Reply Field */
+#define SOCKS_SUCCESS			0x00
+#define SOCKS_GENERAL_FAILURE		0x01
+#define SOCKS_CONNECTION_NOT_ALLOWED	0x02
+#define SOCKS_NETWORK_UNREACHABLE	0x03
+#define SOCKS_HOST_UNREACHABLE		0x04
+#define SOCKS_CONNECTION_REFUSED	0x05
+#define SOCKS_TTL_EXPIRED		0x06
+#define SOCKS_COMMAND_NOT_SUPPORTED	0x07
+#define SOCKS_ADDRESS_NOT_SUPPORTED	0x08
 
 /* for fetch_writev */
 struct iovec;
