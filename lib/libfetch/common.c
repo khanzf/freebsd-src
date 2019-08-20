@@ -380,7 +380,7 @@ fetch_socks5_init(conn_t *conn, const char *host, int port, int verbose)
 		fprintf(stderr, "SOCKS5: No acceptable methods. Disconnecting.\n");
 		goto fail;
 	}
-	else if (ptr[1] != 0x00) {
+	else if (ptr[1] != SOCKS5_NOTIMPLEMENTED) {
 		fprintf(stderr, "SOCKS5: Method currently not implemented. Disconnecting.\n");
 		goto fail;
 	}
@@ -466,49 +466,46 @@ fetch_socks5_getenv(char **host, int *port)
 {
 	char *socks5env, *endptr, *ext;
 
-	if (!(socks5env = getenv("SOCKS5_PROXY")) || !*socks5env) {
+	if ((socks5env = getenv("SOCKS5_PROXY")) == NULL || *socks5env == '\0') {
 		*host = NULL;
 		*port = -1;
-		return (1);
+		return (-1);
 	}
 
 	/* IPv6 addresses begin and end in brackets */
 	if (socks5env[0] == '[') {
-		if (socks5env[strlen(socks5env)-1] == ']') {
+		if (socks5env[strlen(socks5env) - 1] == ']') {
 			*host = strndup(socks5env, strlen(socks5env));
 			if (*host == NULL)
 				goto fail;
 			*port = 1080; /* Default port as defined in RFC1928 */
-		}
-		else {
+		} else {
 			ext = strstr(socks5env, "]:");
-			if (!ext) {
+			if (ext == NULL) {
 				fprintf(stderr, "Bad SOCKS5_PROXY format, missing closing ']': %s\n",
 				    socks5env);
 				return (0);
 			}
 			ext=ext+1;
-			*host = strndup(socks5env, (ext)-(socks5env));
+			*host = strndup(socks5env, ext - socks5env);
 			if (*host == NULL)
 				goto fail;
-			*port = strtoimax(ext+1, (char **)&endptr, 10);
+			*port = strtoimax(ext + 1, (char **)&endptr, 10);
 			if (*port == 0 && errno == EINVAL) {
 				fprintf(stderr, "Bad SOCKS5_PROXY port: %s\n", socks5env);
 				return (0);
 			}
 		}
-	}
-	else {
+	} else {
 		ext = strrchr(socks5env, ':');
-		if (!ext) {
+		if (ext == NULL) {
 			*host = strdup(socks5env);
 			*port = 1080;
-		}
-		else {
+		} else {
 			*host = strndup(socks5env, ext-socks5env);
 			if (*host == NULL)
 				goto fail;
-			*port = strtoimax(ext+1, (char **)&endptr, 10);
+			*port = strtoimax(ext + 1, (char **)&endptr, 10);
 			if (*port == 0 && errno == EINVAL) {
 				fprintf(stderr, "Bad SOCKS5_PROXY port: %s\n", socks5env);
 				return (0);
@@ -520,7 +517,7 @@ fetch_socks5_getenv(char **host, int *port)
 
 fail:
 	fprintf(stderr, "Failure to allocate memory, exiting.\n");
-	return (0);
+	return (-1);
 }
 
 
@@ -532,10 +529,10 @@ fetch_connect(const char *host, int port, int af, int verbose)
 {
 	struct addrinfo *cais = NULL, *sais = NULL, *cai, *sai;
 	const char *bindaddr;
-	char *sockshost;
-	int socksport;
 	conn_t *conn = NULL;
 	int err = 0, sd = -1;
+	char *sockshost;
+	int socksport;
 
 	DEBUGF("---> %s:%d\n", host, port);
 
@@ -544,7 +541,7 @@ fetch_connect(const char *host, int port, int af, int verbose)
 		goto fail;
 
 	/* Not using SOCKS5 proxy */
-	if (!sockshost) {
+	if (sockshost == NULL) {
 		/* resolve server address */
 		if (verbose)
 			fetch_info("resolving server address: %s:%d", host, port);
@@ -559,8 +556,7 @@ fetch_connect(const char *host, int port, int af, int verbose)
 			if ((cais = fetch_resolve(bindaddr, 0, af)) == NULL)
 				goto fail;
 		}
-	}
-	else {
+	} else {
 		/* resolve socks5 proxy address */
 		if (verbose)
 			fetch_info("resolving SOCKS5 server address: %s:%d", sockshost, socksport);
@@ -594,13 +590,12 @@ fetch_connect(const char *host, int port, int af, int verbose)
 		sd = -1;
 	}
 	if (err != 0) {
-		if (verbose && !sockshost)
+		if (verbose && sockshost == NULL)
 			fetch_info("failed to connect to %s:%d", host, port);
 		else if (verbose && sockshost)
 			fetch_info("failed to connect to SOCKS5 server %s:%d", sockshost, socksport);
 		goto syserr;
 	}
-
 
 	if ((conn = fetch_reopen(sd)) == NULL)
 		goto syserr;
