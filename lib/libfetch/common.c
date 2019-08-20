@@ -560,9 +560,8 @@ fetch_connect(const char *host, int port, int af, int verbose)
 		/* resolve socks5 proxy address */
 		if (verbose)
 			fetch_info("resolving SOCKS5 server address: %s:%d", sockshost, socksport);
-		if ((sais = fetch_resolve(sockshost, socksport, af)) == NULL) {
+		if ((sais = fetch_resolve(sockshost, socksport, af)) == NULL)
 			goto fail;
-		}
 	}
 
 	/* try each server address in turn */
