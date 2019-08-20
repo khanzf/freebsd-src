@@ -84,6 +84,7 @@ struct fetcherr {
 #define SOCKS_BIND		0x02
 #define SOCKS_UDP		0x03
 #define SOCKS_NOMETHODS		0xFF
+#define SOCKS5_NOTIMPLEMENTED	0x00
 /* SOCKS5 Reserved */
 #define SOCKS_RSV		0x00
 /* SOCKS5 Address Type */
