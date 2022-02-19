@@ -51,6 +51,8 @@ __FBSDID("$FreeBSD$");
 #include <dev/usb/usbdi.h>
 #include "usbdevs.h"
 
+#include <dev/athn/athnreg.h>
+#include <dev/athn/athnvar.h>
 
 #include <dev/athn/usb/if_athn_usb.h>
 
@@ -103,7 +105,8 @@ int		athn_usb_alloc_tx_list(struct athn_usb_softc *);
 void		athn_usb_free_tx_list(struct athn_usb_softc *);
 int		athn_usb_alloc_tx_cmd(struct athn_usb_softc *);
 void		athn_usb_free_tx_cmd(struct athn_usb_softc *);
-void		athn_usb_task(void *);
+//void		athn_usb_task(void *);
+static void	athn_cmdq_cb(void *, int);
 void		athn_usb_do_async(struct athn_usb_softc *,
 		    void (*)(struct athn_usb_softc *, void *), void *, int);
 void		athn_usb_wait_async(struct athn_usb_softc *);
@@ -239,15 +242,6 @@ athn_usb_match(device_t self)
 		return (ENXIO);
 
 	return (usbd_lookup_id_by_uaa(athn_devs, sizeof(athn_devs), uaa));
-/*
-	struct usb_attach_arg *uaa = aux;
-
-	if (uaa->iface == NULL || uaa->configno != 1)
-		return (UMATCH_NONE);
-
-	return ((athn_usb_lookup(uaa->vendor, uaa->product) != NULL) ?
-	    UMATCH_VENDOR_PRODUCT_CONF_IFACE : UMATCH_NONE);
-*/
 }
 
 static int
@@ -259,16 +253,22 @@ athn_usb_resume(device_t self)
 static int
 athn_usb_attach(device_t self)
 {
-	return 0;
-#if 0
-	struct athn_usb_softc *usc = (struct athn_usb_softc *)self;
+	printf("athn_usb_attach\n");
+	struct usb_attach_arg *uaa = device_get_ivars(self);
+	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
-	struct usb_attach_arg *uaa = aux;
+	struct ieee80211com *ic = &sc->sc_ic;
 
+
+	printf("%p %p %p %s\n", usc, uaa, sc, ic->ic_name);
+
+//	int error;
 	usc->sc_udev = uaa->device;
 	usc->sc_iface = uaa->iface;
 
-	usc->flags = athn_usb_lookup(uaa->vendor, uaa->product)->flags;
+
+	//usc->flags = athn_usb_lookup(uaa->vendor, uaa->product)->flags; // OpenBSD
+	usc->flags = 0x0;
 	sc->flags |= ATHN_FLAG_USB;
 #ifdef notyet
 	/* Check if it is a combo WiFi+Bluetooth (WB193) device. */
@@ -280,11 +280,19 @@ athn_usb_attach(device_t self)
 	sc->ops.write = athn_usb_write;
 	sc->ops.write_barrier = athn_usb_write_barrier;
 
-	usb_init_task(&usc->sc_task, athn_usb_task, sc, USB_TASK_TYPE_GENERIC);
+	// OpenBSD below
+	//usb_init_task(&usc->sc_task, athn_usb_task, sc, USB_TASK_TYPE_GENERIC);
+	// FreeBSD side
+	mtx_init(&sc->sc_mtx, ic->ic_name, MTX_NETWORK_LOCK, MTX_DEF);
+	ATHN_CMDQ_LOCK_INIT(sc);
+	TASK_INIT(&sc->cmdq_task, 0, athn_cmdq_cb, sc);
 
 	if (athn_usb_open_pipes(usc) != 0)
-		return;
+		return 1; // Error condition
 
+	printf("End here");
+	return 0;
+#if 0
 	/* Allocate xfer for firmware commands. */
 	if (athn_usb_alloc_tx_cmd(usc) != 0)
 		return;
@@ -623,9 +631,12 @@ athn_usb_free_tx_cmd(struct athn_usb_softc *usc)
 #endif
 }
 
+//athn_usb_task(void *arg)
 void
-athn_usb_task(void *arg)
+athn_cmdq_cb(void *arg, int pending)
 {
+	// Based on rtwn_cmdq_cb from if_rtwn_task.c
+	printf("athn_cmdq_cb\n");
 #if 0
 	struct athn_usb_softc *usc = arg;
 	struct athn_usb_host_cmd_ring *ring = &usc->cmdq;
