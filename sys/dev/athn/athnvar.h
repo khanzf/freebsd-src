@@ -16,6 +16,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#ifndef ATHNVAR_H
+#define ATHNVAR_H
+
 #include <dev/athn/athnreg.h>
 
 #ifdef notyet
@@ -600,6 +603,13 @@ struct athn_softc {
 	int				sc_txtap_len;
 #endif
 #endif
+	/* FreeBSD additions */
+	struct mtx		sc_mtx;
+
+	struct mtx		cmdq_mtx;
+	struct task		cmdq_task;
+	uint8_t			cmdq_first;
+	uint8_t			cmdq_last;
 };
 
 extern int	athn_attach(struct athn_softc *);
@@ -607,3 +617,9 @@ extern void	athn_detach(struct athn_softc *);
 extern void	athn_suspend(struct athn_softc *);
 extern void	athn_wakeup(struct athn_softc *);
 extern int	athn_intr(void *);
+
+/* FreeBSD Additions */
+#define ATHN_CMDQ_LOCK_INIT(sc) \
+	mtx_init(&(sc)->cmdq_mtx, "cmdq lock", NULL, MTX_DEF)
+
+#endif /* ATHNVAR_H */
