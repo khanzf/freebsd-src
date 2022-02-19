@@ -20,6 +20,10 @@
 /*
  * MAC registers.
  */
+
+#ifndef ATHNREG_H
+#define ATHNREG_H
+
 #define AR_CR				0x0008
 #define AR_RXDP				0x000c
 #define AR_CFG				0x0014
@@ -1497,3 +1501,5 @@
 /* Rewrite. */
 #define RW(var, field, val)						\
 	(((var) & ~field##_M) | SM(field, val))
+
+#endif /* ATHNREG_H */
