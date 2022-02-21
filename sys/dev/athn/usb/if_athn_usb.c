@@ -97,7 +97,7 @@ static int		athn_usb_match(device_t);
 static int		athn_usb_attach(device_t);
 int		athn_usb_detach(device_t);
 void		athn_usb_attachhook(device_t);
-int		athn_usb_open_pipes(struct athn_usb_softc *);
+int		athn_usb_open_pipes(struct athn_usb_softc *, device_t);
 void		athn_usb_close_pipes(struct athn_usb_softc *);
 int		athn_usb_alloc_rx_list(struct athn_usb_softc *);
 void		athn_usb_free_rx_list(struct athn_usb_softc *);
@@ -218,6 +218,12 @@ int		athn_hw_reset(struct athn_softc *, struct ieee80211_channel *,
 void		athn_updateedca(struct ieee80211com *);
 void		athn_updateslot(struct ieee80211com *);
 
+
+/* FreeBSD additions */
+void athn_bulk_rx_callback(struct usb_xfer *, usb_error_t);
+void athn_bulk_tx_callback(struct usb_xfer *, usb_error_t);
+
+
 #if 0
 const struct cfattach athn_usb_ca = {
 	sizeof(struct athn_usb_softc),
@@ -228,6 +234,71 @@ const struct cfattach athn_usb_ca = {
 #endif
 
 #define ATHN_CONFIG_INDEX	0
+
+static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
+	[ATHN_BULK_TX_DATA] = {
+		.type = UE_BULK,
+		.endpoint = 0x1, //AR_PIPE_TX_DATA,
+		.direction = UE_DIR_OUT,
+		.flags = {
+			.short_xfer_ok = 1,
+//			.force_short_xfer = 1,
+			.pipe_bof = 1
+		},
+		.callback = athn_bulk_tx_callback,
+	},
+	[ATHN_BULK_RX_DATA] = {
+		.type = UE_BULK,
+		.endpoint = 0x82, //AR_PIPE_RX_DATA,
+		.direction = UE_DIR_IN,
+		.flags = {
+			.short_xfer_ok = 1,
+//			.force_short_xfer = 1,
+			.pipe_bof = 1
+		},
+		.callback = athn_bulk_rx_callback,
+	},
+	[ATHN_BULK_RX_INTR] = {
+		.type = UE_INTERRUPT,
+		.endpoint = 0x83, //AR_PIPE_RX_INTR,
+		.direction = UE_DIR_IN,
+		.flags = {
+			.short_xfer_ok = 1,
+//			.force_short_xfer = 1,
+			.pipe_bof = 1
+		},
+		.callback = athn_bulk_rx_callback,
+	},
+	[ATHN_BULK_TX_INTR] = {
+		.type = UE_INTERRUPT,
+		.endpoint = 0x4, //AR_PIPE_TX_INTR,
+		.direction = UE_DIR_OUT,
+		.flags = {
+			.short_xfer_ok = 1,
+//			.force_short_xfer = 1,
+			.pipe_bof = 1
+		},
+		.callback= athn_bulk_tx_callback,
+	}
+};
+
+/* FreeBSD additions */
+void
+athn_bulk_rx_callback(struct usb_xfer *xfer, usb_error_t error)
+{
+	printf("athn_bulk_rx_callback!\n");
+}
+
+
+/* FreeBSD additions */
+void
+athn_bulk_tx_callback(struct usb_xfer *xfer, usb_error_t error)
+{
+	printf("athn_bulk_tx_callback!\n");
+}
+
+
+/* End of FreeBSD additions */
 
 static int
 athn_usb_match(device_t self)
@@ -287,7 +358,7 @@ athn_usb_attach(device_t self)
 	ATHN_CMDQ_LOCK_INIT(sc);
 	TASK_INIT(&sc->cmdq_task, 0, athn_cmdq_cb, sc);
 
-	if (athn_usb_open_pipes(usc) != 0)
+	if (athn_usb_open_pipes(usc, self) != 0)
 		return 1; // Error condition
 
 	printf("End here");
@@ -403,8 +474,28 @@ athn_usb_attachhook(device_t self)
 }
 
 int
-athn_usb_open_pipes(struct athn_usb_softc *usc)
+athn_usb_open_pipes(struct athn_usb_softc *usc, device_t dev)
 {
+//	struct usb_config *rtwn_config;
+	struct athn_softc *sc = &usc->sc_sc;
+//	const uint8_t iface_index = ATHN_IFACE_INDEX;
+//	struct usb_endpoint *ep, *ep_end;
+//#define ATHN_MAX_EPOUT 4 // Move to header file
+//	uint8_t addr[ATHN_MAX_EPOUT];
+	struct usb_attach_arg *uaa = device_get_ivars(dev);
+	int error;
+	uint8_t iface_index = ATHN_IFACE_INDEX - 1;
+	int ret = ENXIO;
+
+	error = usbd_transfer_setup(uaa->device, &iface_index, sc->sc_xfer,
+		athn_config_common, ATHN_N_TRANSFERS, sc, &sc->sc_mtx);
+	if (error) {
+		device_printf(dev, "could not allocate USB transfers, "
+			"err=%s\n", usbd_errstr(error));
+			ret = ENXIO;
+			return (ret);
+	}
+
 	return 0;
 #if 0
 	usb_endpoint_descriptor_t *ed;
