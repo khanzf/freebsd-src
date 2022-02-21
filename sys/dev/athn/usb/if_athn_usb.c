@@ -484,7 +484,7 @@ athn_usb_open_pipes(struct athn_usb_softc *usc, device_t dev)
 //	uint8_t addr[ATHN_MAX_EPOUT];
 	struct usb_attach_arg *uaa = device_get_ivars(dev);
 	int error;
-	uint8_t iface_index = ATHN_IFACE_INDEX - 1;
+	uint8_t iface_index = ATHN_IFACE_INDEX;
 	int ret = ENXIO;
 
 	error = usbd_transfer_setup(uaa->device, &iface_index, sc->sc_xfer,
