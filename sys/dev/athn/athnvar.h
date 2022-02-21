@@ -21,6 +21,15 @@
 
 #include <dev/athn/athnreg.h>
 
+// XXX TODO: Figure out what the enum should look like with WME_AC_BE, might not be relevant
+enum {
+	ATHN_BULK_TX_DATA,
+	ATHN_BULK_RX_DATA,
+	ATHN_BULK_RX_INTR,
+	ATHN_BULK_TX_INTR,
+	ATHN_N_TRANSFERS, // A semi-copy from RTWN_N_TRANSFER
+};
+
 #ifdef notyet
 #define ATHN_BT_COEXISTENCE	1
 #endif
@@ -610,6 +619,8 @@ struct athn_softc {
 	struct task		cmdq_task;
 	uint8_t			cmdq_first;
 	uint8_t			cmdq_last;
+
+	struct usb_xfer     *sc_xfer[ATHN_N_TRANSFERS];
 };
 
 extern int	athn_attach(struct athn_softc *);

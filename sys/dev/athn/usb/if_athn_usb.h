@@ -25,15 +25,6 @@ struct athn_usb_softc;
 /* Start of FreeBSD constructs */
 #define ATHN_IFACE_INDEX		0
 
-enum {
-	ATHN_BULK_TX_DATA,
-	ATHN_BULK_RX_DATA,
-	ATHN_BULK_RX_INTR,
-	ATHN_BULK_TX_INTR,
-	ATHN_N_TRANSFER = 5,
-};
-
-
 void	ar9271u_attach(struct athn_usb_softc *);
 
 enum {
