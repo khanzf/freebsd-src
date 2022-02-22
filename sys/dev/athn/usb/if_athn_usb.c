@@ -238,7 +238,7 @@ const struct cfattach athn_usb_ca = {
 static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 	[ATHN_BULK_TX_DATA] = {
 		.type = UE_BULK,
-		.endpoint = 0x1, //AR_PIPE_TX_DATA,
+		.endpoint = AR_PIPE_TX_DATA,
 		.direction = UE_DIR_OUT,
 		.flags = {
 			.short_xfer_ok = 1,
@@ -249,7 +249,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 	},
 	[ATHN_BULK_RX_DATA] = {
 		.type = UE_BULK,
-		.endpoint = 0x82, //AR_PIPE_RX_DATA,
+		.endpoint = AR_PIPE_RX_DATA,
 		.direction = UE_DIR_IN,
 		.flags = {
 			.short_xfer_ok = 1,
@@ -260,7 +260,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 	},
 	[ATHN_BULK_RX_INTR] = {
 		.type = UE_INTERRUPT,
-		.endpoint = 0x83, //AR_PIPE_RX_INTR,
+		.endpoint = AR_PIPE_RX_INTR,
 		.direction = UE_DIR_IN,
 		.flags = {
 			.short_xfer_ok = 1,
@@ -271,7 +271,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 	},
 	[ATHN_BULK_TX_INTR] = {
 		.type = UE_INTERRUPT,
-		.endpoint = 0x4, //AR_PIPE_TX_INTR,
+		.endpoint = AR_PIPE_TX_INTR,
 		.direction = UE_DIR_OUT,
 		.flags = {
 			.short_xfer_ok = 1,
