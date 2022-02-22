@@ -329,7 +329,7 @@ athn_usb_attach(device_t self)
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
-
+	int error;
 
 	printf("%p %p %p %s\n", usc, uaa, sc, ic->ic_name);
 
@@ -362,11 +362,12 @@ athn_usb_attach(device_t self)
 		return 1; // Error condition
 
 	printf("End here");
+	/* Allocate xfer for firmware commands. */
+	error = athn_usb_alloc_tx_cmd(usc);
+	if (error)
+		return error;
 	return 0;
 #if 0
-	/* Allocate xfer for firmware commands. */
-	if (athn_usb_alloc_tx_cmd(usc) != 0)
-		return;
 
 	config_mountroot(self, athn_usb_attachhook);
 #endif
@@ -687,11 +688,50 @@ athn_usb_free_tx_list(struct athn_usb_softc *usc)
 #endif
 }
 
+static int
+athn_usb_alloc_list(struct athn_softc *sc, struct athn_data data[],
+	int ndata, int maxsz)
+{
+	int i, error;
+
+	for (i = 0; i < ndata; i++) {
+		struct athn_data *dp = &data[i];
+		dp->m = NULL;
+		dp->buf = malloc(maxsz, M_USBDEV, M_NOWAIT);
+		if (dp->buf == NULL) {
+			printf("COuld not allocate buffers\n");
+//			device_printf(*sc->sc_udev,
+//				"coult not allocate buffer\n");
+			error = ENOMEM;
+			goto fail;
+		}
+		dp->ni = NULL;
+	}
+
+	return 0;
+
+fail:
+	printf("FAILURE CONDITION\n");
+	return (error);
+}
+
 int
 athn_usb_alloc_tx_cmd(struct athn_usb_softc *usc)
 {
+	struct athn_softc *sc = &usc->sc_sc;
+	int error;
+	printf("athn_usb_alloc_tx_cmd starting\n");
+
+	error = athn_usb_alloc_list(sc, usc->usc_cmd, ATHN_USB_CMD_LIST_COUNT, ATHN_USB_TXCMDSZ);
+	if (error)
+		return (error);
+
+	printf("athn_usb_alloc_tx_cmd ending\n");
+
+	// STAILQ stuff
+
 	return 0;
-#if 0
+#if 0 // OpenBSD
 	struct athn_usb_tx_data *data = &usc->tx_cmd;
 
 	data->sc = usc;	/* Backpointer for callbacks. */
