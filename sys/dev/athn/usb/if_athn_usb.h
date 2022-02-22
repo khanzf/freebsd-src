@@ -32,6 +32,16 @@ enum {
 	ATHN_CHIP_MAX_USB
 };
 
+struct athn_data {
+	uint8_t		*buf;
+	int			id;
+	uint16_t	buflen;
+	struct mbuf	*m;
+	struct ieee80211_node	*ni;
+	STAILQ_ENTRY(athn_data)	next;
+};
+typedef STAILQ_HEAD(, athn_data) athn_datahead;
+
 /* various supported device vendors/products */
 static const STRUCT_USB_HOST_ID athn_devs[] = {
 	/* RTL8188CE-VAU/RTL8188CUS/RTL8188RU/RTL8192CU */
@@ -459,6 +469,9 @@ struct athn_usb_host_cmd_ring {
 	int				queued;
 };
 
+// XXX Should this be moved elsewhere?
+#define ATHN_USB_CMD_LIST_COUNT 1
+
 struct athn_usb_softc {
 	struct athn_softc		sc_sc;
 #define usb_dev	sc_sc.sc_dev
@@ -519,4 +532,7 @@ struct athn_usb_softc {
 	void				(*sc_node_free)(struct ieee80211com *,
 					    struct ieee80211_node *);
 	int				sc_key_tasks;
+
+	/* FreeBSD additions */
+	struct athn_data	usc_cmd[ATHN_USB_CMD_LIST_COUNT];
 };
