@@ -366,11 +366,10 @@ athn_usb_attach(device_t self)
 	error = athn_usb_alloc_tx_cmd(usc);
 	if (error)
 		return error;
-	return 0;
-#if 0
 
-	config_mountroot(self, athn_usb_attachhook);
-#endif
+//	config_mountroot(self, athn_usb_attachhook);
+	athn_usb_attachhook(self);
+	return 0;
 }
 
 int
