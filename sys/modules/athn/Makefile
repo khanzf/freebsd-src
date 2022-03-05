@@ -10,8 +10,8 @@ SRCS     = athn.c athnreg.h athnvar.h \
 	   bus_if.h device_if.h \
 	   opt_bus.h opt_rtwn.h opt_wlan.h
 
-.PATH:	   ${SRCTOP}/sys/dev/athn/ar9271
-SRCS	+= ar9271u.c ar9271u.h
+#.PATH:	   ${SRCTOP}/sys/dev/athn/ar9271
+#SRCS	+= ar9271u.c ar9271u.h
 
 #opt_rtwn.h:
 #	@echo "#define RTWN_DEBUG 1" > ${.TARGET}
