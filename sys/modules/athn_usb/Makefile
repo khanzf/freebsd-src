@@ -7,11 +7,12 @@ SYSDIR?=${SRCTOP}/sys
 
 KMOD     = if_athn_usb
 SRCS	 = if_athn_usb.c if_athn_usb.h \
+	   ar9271u.c \
 	   bus_if.h device_if.h \
 	   opt_bus.h opt_athn.h opt_usb.h opt_wlan.h usb_if.h usbdevs.h
 
-.PATH: ${SRCTOP}/sys/dev/athn/ar9271
-SRCS	+= ar9271u.c
+#.PATH: ${SRCTOP}/sys/dev/athn/ar9271
+#SRCS	+= ar9271u.c
 
 #opt_athn.h:
 #	@echo "#define RTWN_DEBUG 1" > ${.TARGET}

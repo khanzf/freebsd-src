@@ -39,6 +39,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/endian.h>
 #include <sys/linker.h>
 #include <sys/kdb.h>
+#include <sys/firmware.h>
 
 #include <net/if.h>
 #include <net/if_var.h>
@@ -55,6 +56,8 @@ __FBSDID("$FreeBSD$");
 #include <dev/athn/athnvar.h>
 
 #include <dev/athn/usb/if_athn_usb.h>
+
+MALLOC_DEFINE(M_ATHN_USB, "athn_usb", "athn usb private state");
 
 #if 0
 static const struct athn_usb_type {
@@ -223,6 +226,11 @@ void		athn_updateslot(struct ieee80211com *);
 void athn_bulk_rx_callback(struct usb_xfer *, usb_error_t);
 void athn_bulk_tx_callback(struct usb_xfer *, usb_error_t);
 
+#define ATHN_USB_DEV(v, p) { USB_VPI(v, p, 0) }
+static const STRUCT_USB_HOST_ID athn_devs[] = {
+	ATHN_USB_DEV(USB_VENDOR_ATHEROS2, USB_PRODUCT_ATHEROS2_AR9271U)
+};
+
 
 #if 0
 const struct cfattach athn_usb_ca = {
@@ -351,6 +359,8 @@ athn_usb_attach(device_t self)
 	sc->ops.write = athn_usb_write;
 	sc->ops.write_barrier = athn_usb_write_barrier;
 
+	athn_usb_attach_private(usc, USB_GET_DRIVER_INFO(uaa));
+
 	// OpenBSD below
 	//usb_init_task(&usc->sc_task, athn_usb_task, sc, USB_TASK_TYPE_GENERIC);
 	// FreeBSD side
@@ -403,20 +413,23 @@ athn_usb_detach(device_t self)
 void
 athn_usb_attachhook(device_t self)
 {
-#if 0
-	struct athn_usb_softc *usc = (struct athn_usb_softc *)self;
-	struct athn_softc *sc = &usc->sc_sc;
-	struct athn_ops *ops = &sc->ops;
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = &ic->ic_if;
-	int s, i, error;
+//	struct usb_attach_arg *uaa = device_get_ivars(self);
+	struct athn_usb_softc *usc = device_get_softc(self);
+//	struct athn_softc *sc = &usc->sc_sc;
+//	struct athn_ops *ops = &sc->ops;
+//	struct ieee80211com *ic = &sc->sc_ic;
+//	struct ifnet *ifp = &ic->ic_if;
+//	int s, i, error;
+	int error;
 
 	/* Load firmware. */
 	error = athn_usb_load_firmware(usc);
 	if (error != 0) {
-		printf("%s: could not load firmware\n", sc->sc_dev.dv_xname);
+		printf("Could not load firmware\n");
+//		printf("%s: could not load firmware\n", sc->sc_dev.dv_xname);
 		return;
 	}
+#if 0
 
 	/* Setup the host transport communication interface. */
 	error = athn_usb_htc_setup(usc);
@@ -828,13 +841,42 @@ athn_usb_wait_async(struct athn_usb_softc *usc)
 int
 athn_usb_load_firmware(struct athn_usb_softc *usc)
 {
-	return 0;
+	struct athn_softc *sc = &usc->sc_sc;
+	const struct firmware *fw;
+	size_t fwsize, size;
+	int error = 0;
+	int mlen;
+	void *fw_copy_head;
+	unsigned char *ptr;
+	uint32_t addr;
+	usb_device_request_t req;
+	printf("athn_usb_load_firmware start\n");
+
+	// ATHN_UNLOCK GOES HERE
+	fw = firmware_get(sc->fwname);
+	// ATHN_LOCK GOES HERE
+	if (fw == NULL) {
+		device_printf(sc->sc_dev, "failed to load of file %s\n", sc->fwname);
+		return (ENOENT);
+	}
+
+#ifdef CHECK_THE_FIRMWARE
+	size_t len;
+	len = fw->datasize;
+	//if (len < sizeof(*hdr) || len > sc->fwsize_limit) {
+	if (len < 999999 || len > sc->fwsize_limit) {
+		device_printf(sc->sc_dev, "wrong firmware size (%zu)\n", len);
+		error = EINVAL;
+		return error;
+	}
+#endif
+	fwsize = fw->datasize;
 #if 0
 	usb_device_descriptor_t *dd;
 	usb_device_request_t req;
 	const char *name;
 	u_char *fw, *ptr;
-	size_t fwsize, size;
+	 fwsize, size;
 	uint32_t addr;
 	int s, mlen, error;
 
@@ -850,8 +892,12 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		    usc->usb_dev.dv_xname, name, error);
 		return (error);
 	}
-	/* Load firmware image. */
-	ptr = fw;
+#endif
+
+	fw_copy_head = malloc(fw->datasize, M_ATHN_USB, M_WAITOK);
+	memcpy(fw_copy_head, fw->data, fw->datasize);
+	ptr = fw_copy_head;
+
 	addr = AR9271_FIRMWARE >> 8;
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
 	req.bRequest = AR_FW_DOWNLOAD;
@@ -862,37 +908,44 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 
 		USETW(req.wValue, addr);
 		USETW(req.wLength, mlen);
-		error = usbd_do_request(usc->sc_udev, &req, ptr);
+		error = usbd_do_request(usc->sc_udev, NULL, &req, (void *)ptr);
 		if (error != 0) {
-			free(fw, M_DEVBUF, fwsize);
 			return (error);
 		}
 		addr += mlen >> 8;
 		ptr  += mlen;
 		size -= mlen;
 	}
-	free(fw, M_DEVBUF, fwsize);
+	//free(fw, M_DEVBUF, fwsize);
 
+	return 0;
 	/* Start firmware. */
-	if (usc->flags & ATHN_USB_FLAG_AR7010)
+	if (usc->flags & ATHN_USB_FLAG_AR7010) {
+		printf("AR7010_FIRMWARE_TEXT\n");
 		addr = AR7010_FIRMWARE_TEXT >> 8;
-	else
+	}
+	else {
+		printf("AR9271_FIRMWARE_TEXT\n");
 		addr = AR9271_FIRMWARE_TEXT >> 8;
+	}
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
 	req.bRequest = AR_FW_DOWNLOAD_COMP;
 	USETW(req.wIndex, 0);
 	USETW(req.wValue, addr);
 	USETW(req.wLength, 0);
-	s = splusb();
+//	s = splusb();
 	usc->wait_msg_id = AR_HTC_MSG_READY;
-	error = usbd_do_request(usc->sc_udev, &req, NULL);
+//	error = usbd_do_request(usc->sc_udev, &req, NULL);
+	error = usbd_do_request(usc->sc_udev, NULL, &req, NULL);
 	/* Wait at most 1 second for firmware to boot. */
-	if (error == 0 && usc->wait_msg_id != 0)
-		error = tsleep_nsec(&usc->wait_msg_id, 0, "athnfw",
-		    SEC_TO_NSEC(1));
+	if (error == 0 && usc->wait_msg_id != 0) {
+		printf("Latter error!\n");
+		error = tsleep(usc, 0, "athnfw", hz);
+	}
 	usc->wait_msg_id = 0;
-	splx(s);
+//	splx(s);
 	return (error);
+#if 0
 #endif
 }
 
