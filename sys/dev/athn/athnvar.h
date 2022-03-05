@@ -621,6 +621,13 @@ struct athn_softc {
 	uint8_t			cmdq_last;
 
 	struct usb_xfer     *sc_xfer[ATHN_N_TRANSFERS];
+
+	/* Firmware-specific */
+	const char		*fwname;
+	uint16_t		fwver;
+	uint16_t		fwsig;
+	int				fwcur;
+	int				fwsize_limit;
 };
 
 extern int	athn_attach(struct athn_softc *);
