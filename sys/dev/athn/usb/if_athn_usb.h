@@ -43,18 +43,17 @@ struct athn_data {
 typedef STAILQ_HEAD(, athn_data) athn_datahead;
 
 /* various supported device vendors/products */
-static const STRUCT_USB_HOST_ID athn_devs[] = {
-	/* RTL8188CE-VAU/RTL8188CUS/RTL8188RU/RTL8192CU */
-#define ATHN_AR9271U_DEV(v,p) \
-	{ USB_VPI(USB_VENDOR_##v, USB_PRODUCT_##v##_##p, ATHN_CHIP_AR9271U) }
-	ATHN_AR9271U_DEV(ATHEROS2,		AR9271U),
-};
-
 typedef void	(*chip_usb_attach)(struct athn_usb_softc *);
 
-static const chip_usb_attach rtwn_chip_usb_attach[ATHN_CHIP_MAX_USB] = {
-	[ATHN_CHIP_AR9271U] = ar9271u_attach
+static const chip_usb_attach athn_chip_usb_attach[ATHN_CHIP_MAX_USB] = {
+ 	[ATHN_CHIP_AR9271U] = ar9271u_attach
 };
+
+static __inline void
+athn_usb_attach_private(struct athn_usb_softc *usc, int chip)
+{
+	athn_chip_usb_attach[chip](usc);
+}
 /* End of FreeBSD constructs */
 
 
