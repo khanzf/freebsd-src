@@ -55,6 +55,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/athn/athnreg.h>
 #include <dev/athn/athnvar.h>
 
+#define ECDA_NUM_AC 4
 #include <dev/athn/usb/if_athn_usb.h>
 
 MALLOC_DEFINE(M_ATHN_USB, "athn_usb", "athn usb private state");
@@ -429,13 +430,13 @@ athn_usb_attachhook(device_t self)
 //		printf("%s: could not load firmware\n", sc->sc_dev.dv_xname);
 		return;
 	}
-#if 0
 
 	/* Setup the host transport communication interface. */
 	error = athn_usb_htc_setup(usc);
 	if (error != 0)
 		return;
 
+#if 0
 	/* We're now ready to attach the bus agnostic driver. */
 	s = splnet();
 	error = athn_attach(sc);
@@ -953,8 +954,7 @@ int
 athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
     int len)
 {
-	return 0;
-#if 0
+//	return 0;
 	struct athn_usb_tx_data *data = &usc->tx_cmd;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_htc_msg_hdr *msg;
@@ -969,10 +969,32 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
 
 	memcpy(&msg[1], buf, len);
 
-	usbd_setup_xfer(data->xfer, usc->tx_intr_pipe, NULL, data->buf,
-	    sizeof(*htc) + sizeof(*msg) + len,
-	    USBD_SHORT_XFER_OK | USBD_NO_COPY | USBD_SYNCHRONOUS,
-	    ATHN_USB_CMD_TIMEOUT, NULL);
+
+	return 0;
+#if 0
+
+	uint8_t iface_index = ATHN_IFACE_INDEX;
+	int ret = ENXIO;
+
+	error = usbd_transfer_setup(
+		uaa->device,		// udev
+		&iface_index,		// ifaces
+		sc->sc_xfer,		// xfer
+		athn_config_common,	//
+		ATHN_N_TRANSFERS,
+		sc,
+		&sc->sc_mtx);
+
+//	usbd_transfer_setup
+	usbd_setup_xfer(
+		data->xfer,				// xfer
+		usc->tx_intr_pipe,		// pipe
+		NULL,					// priv data?
+		data->buf,				// buffer data?
+	    sizeof(*htc) + sizeof(*msg) + len,	// length of data
+	    USBD_SHORT_XFER_OK | USBD_NO_COPY | USBD_SYNCHRONOUS, // flags
+	    ATHN_USB_CMD_TIMEOUT,	// timeout time
+		NULL); 					// callback function?
 	return (usbd_transfer(data->xfer));
 #endif
 }
@@ -981,9 +1003,8 @@ int
 athn_usb_htc_setup(struct athn_usb_softc *usc)
 {
 	return 0;
-#if 0
 	struct ar_htc_msg_config_pipe cfg;
-	int s, error;
+	int error;
 
 	/*
 	 * Connect WMI services to USB pipes.
@@ -1009,19 +1030,19 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	if (error != 0)
 		return (error);
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_DATA_BE,
-	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[EDCA_AC_BE]);
+	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[WME_AC_BE]);
 	if (error != 0)
 		return (error);
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_DATA_BK,
-	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[EDCA_AC_BK]);
+	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[WME_AC_BK]);
 	if (error != 0)
 		return (error);
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_DATA_VI,
-	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[EDCA_AC_VI]);
+	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[WME_AC_VI]);
 	if (error != 0)
 		return (error);
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_DATA_VO,
-	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[EDCA_AC_VO]);
+	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[WME_AC_VO]);
 	if (error != 0)
 		return (error);
 
@@ -1029,27 +1050,28 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	memset(&cfg, 0, sizeof(cfg));
 	cfg.pipe_id = UE_GET_ADDR(AR_PIPE_TX_DATA);
 	cfg.credits = (usc->flags & ATHN_USB_FLAG_AR7010) ? 45 : 33;
-	s = splusb();
+//	s = splusb();
 	usc->wait_msg_id = AR_HTC_MSG_CONF_PIPE_RSP;
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
+	printf("unfinished\n");
 	if (error == 0 && usc->wait_msg_id != 0)
-		error = tsleep_nsec(&usc->wait_msg_id, 0, "athnhtc",
-		    SEC_TO_NSEC(1));
+		error = tsleep(usc, 0, "athnfw", hz);
+//		error = tsleep_nsec(&usc->wait_msg_id, 0, "athnhtc",
+//		    SEC_TO_NSEC(1));
 	usc->wait_msg_id = 0;
-	splx(s);
+//	splx(s);
 	if (error != 0) {
-		printf("%s: could not configure pipe\n",
-		    usc->usb_dev.dv_xname);
+		printf(": could not configure pipe\n");
 		return (error);
 	}
 
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_SETUP_COMPLETE, NULL, 0);
 	if (error != 0) {
-		printf("%s: could not complete setup\n",
-		    usc->usb_dev.dv_xname);
+		printf(": could not complete setup\n");
 		return (error);
 	}
 	return (0);
+#if 0
 #endif
 }
 
@@ -1058,41 +1080,42 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
     uint8_t ul_pipe, uint8_t dl_pipe, uint8_t *endpoint_id)
 {
 	return 0;
-#if 0
 	struct ar_htc_msg_conn_svc msg;
 	struct ar_htc_msg_conn_svc_rsp rsp;
-	int s, error;
+	int error;
 
 	memset(&msg, 0, sizeof(msg));
 	msg.svc_id = htobe16(svc_id);
 	msg.dl_pipeid = UE_GET_ADDR(dl_pipe);
 	msg.ul_pipeid = UE_GET_ADDR(ul_pipe);
-	s = splusb();
+//	s = splusb();
 	usc->msg_conn_svc_rsp = &rsp;
 	usc->wait_msg_id = AR_HTC_MSG_CONN_SVC_RSP;
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONN_SVC, &msg, sizeof(msg));
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0)
-		error = tsleep_nsec(&usc->wait_msg_id, 0, "athnhtc",
-		    SEC_TO_NSEC(1));
+		error = tsleep(usc, 0, "athnfw", hz);
+		//error = tsleep_nsec(&usc->wait_msg_id, 0, "athnhtc",
+		//    SEC_TO_NSEC(1));
 	usc->wait_msg_id = 0;
-	splx(s);
+//	splx(s);
 	if (error != 0) {
-		printf("%s: error waiting for service %d connection\n",
-		    usc->usb_dev.dv_xname, svc_id);
+		printf("error waiting for service %d connection\n", svc_id);
+//		printf("%s: error waiting for service %d connection\n",
+//		    usc->usb_dev.dv_xname, svc_id);
 		return (error);
 	}
 	if (rsp.status != AR_HTC_SVC_SUCCESS) {
-		printf("%s: service %d connection failed, error %d\n",
-		    usc->usb_dev.dv_xname, svc_id, rsp.status);
+		printf(": service %d connection failed, error %d\n",  svc_id, rsp.status);
 		return (EIO);
 	}
-	DPRINTF(("service %d successfully connected to endpoint %d\n",
-	    svc_id, rsp.endpoint_id));
+//	DPRINTF(("service %d successfully connected to endpoint %d\n",
+//	    svc_id, rsp.endpoint_id));
 
 	/* Return endpoint id. */
 	*endpoint_id = rsp.endpoint_id;
 	return (0);
+#if 0
 #endif
 }
 
