@@ -24,6 +24,7 @@ struct athn_usb_softc;
 
 /* Start of FreeBSD constructs */
 #define ATHN_IFACE_INDEX		0
+#define EDCA_NUM_AC 4
 
 void	ar9271u_attach(struct athn_usb_softc *);
 
@@ -516,8 +517,8 @@ struct athn_usb_softc {
 	uint8_t				ep_cab;
 	uint8_t				ep_uapsd;
 	uint8_t				ep_mgmt;
-#if 0
 	uint8_t				ep_data[EDCA_NUM_AC];
+#if 0
 #endif
 
 	/* 
