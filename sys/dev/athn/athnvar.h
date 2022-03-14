@@ -377,6 +377,9 @@ struct athn_calib {
 
 struct athn_softc;
 
+#define ATHN_LOCK(sc)		mtx_lock(&(sc)->sc_mtx)
+#define ATHN_UNLOCK(sc)		mtx_unlock(&(sc)->sc_mtx)
+
 struct athn_ops {
 	/* Bus callbacks. */
 	uint32_t	(*read)(struct athn_softc *, uint32_t);
@@ -619,8 +622,6 @@ struct athn_softc {
 	struct task		cmdq_task;
 	uint8_t			cmdq_first;
 	uint8_t			cmdq_last;
-
-	struct usb_xfer     *sc_xfer[ATHN_N_TRANSFERS];
 
 	/* Firmware-specific */
 	const char		*fwname;
