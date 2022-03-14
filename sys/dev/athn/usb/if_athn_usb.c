@@ -450,13 +450,11 @@ athn_usb_attachhook(device_t self)
 
 	/* Setup the host transport communication interface. */
 //	ATHN_LOCK(sc);
-	printf("AAAAA Going into athn_usb_htc_setup...\n");
 	error = athn_usb_htc_setup(usc);
 //	ATHN_UNLOCK(sc);
 	if (error != 0) {
 		return(ENXIO);
 	}
-
 #if 0
 	/* We're now ready to attach the bus agnostic driver. */
 	s = splnet();
@@ -961,15 +959,17 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	if (error == 0 && usc->wait_msg_id != 0) {
 		printf("Latter error! %d %d\n", error, usc->wait_msg_id);
 //		ATHN_LOCK(sc);
-		error = mtx_sleep(sc, &sc->sc_mtx, 0 , "athnfw", hz);
-		if (error == EINTR)
-			printf("EINTR on line %d\n", __LINE__);
-		else if (error == ERESTART)
-			printf("ERESTART on line %d\n", __LINE__);
-		else if (error == EWOULDBLOCK)
-			printf("EWOULDBLOCK on %d\n", __LINE__);
-		else
-			printf("Clear on %d\n", __LINE__);
+		tsleep(sc, 0, "athnfw", hz);
+		error = 0; // tsleep returning EWOULDBLOCK, why?
+//		error = mtx_sleep(sc, &sc->sc_mtx, 0 , "athnfw", hz);
+//		if (error == EINTR)
+//			printf("EINTR on line %d\n", __LINE__);
+//		else if (error == ERESTART)
+//			printf("ERESTART on line %d\n", __LINE__);
+//		else if (error == EWOULDBLOCK)
+//			printf("EWOULDBLOCK on %d\n", __LINE__);
+//		else
+//			printf("Clear on %d\n", __LINE__);
 //		ATHN_UNLOCK(sc);
 	}
 	usc->wait_msg_id = 0;
@@ -1086,18 +1086,8 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	printf("Ending after 1 iteration, delete me later\n");
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
 	if (error == 0 && usc->wait_msg_id != 0) {
-		printf("Sleep here Line: %d\n", __LINE__);
-		ATHN_LOCK(sc);
-		error = mtx_sleep(usc, &sc->sc_mtx, 0 , "athnhtc", hz); // Check error message
-		if (error == EINTR)
-			printf("EINTR on line %d\n", __LINE__);
-		else if (error == ERESTART)
-			printf("ERESTART on line %d\n", __LINE__);
-		else if (error == EWOULDBLOCK)
-			printf("EWOULDBLOCK on %d\n", __LINE__);
-		else
-			printf("Clear on %d\n", __LINE__);
-		ATHN_UNLOCK(sc);
+		tsleep(sc, 0, "athnhtc", hz);
+		error = 0;
 	}
 	usc->wait_msg_id = 0;
 	if (error != 0) {
@@ -1137,17 +1127,19 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0) {
 		printf("Sleep here Line: %d\n", __LINE__);
-		ATHN_LOCK(sc);
-		error = mtx_sleep(usc, &sc->sc_mtx, 0, "athnhtc", hz);
-		if (error == EINTR)
-			printf("EINTR on line %d\n", __LINE__);
-		else if (error == ERESTART)
-			printf("ERESTART on line %d\n", __LINE__);
-		else if (error == EWOULDBLOCK)
-			printf("EWOULDBLOCK on %d\n", __LINE__);
-		else
-			printf("Clear on %d\n", __LINE__);
-		ATHN_UNLOCK(sc);
+//		ATHN_LOCK(sc);
+//		error = mtx_sleep(usc, &sc->sc_mtx, 0, "athnhtc", hz);
+		tsleep(sc, 0, "athnfw", hz);
+		error = 0;
+//		if (error == EINTR)
+//			printf("EINTR on line %d\n", __LINE__);
+//		else if (error == ERESTART)
+//			printf("ERESTART on line %d\n", __LINE__);
+//		else if (error == EWOULDBLOCK)
+//			printf("EWOULDBLOCK on %d\n", __LINE__);
+//		else
+//			printf("Clear on %d\n", __LINE__);
+//		ATHN_UNLOCK(sc);
 	}
 	usc->wait_msg_id = 0;
 //	splx(s);
@@ -1175,6 +1167,7 @@ int
 athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
     int ilen, void *obuf)
 {
+	printf("At athn_usb_wmi_xcmd, unimplemented\n");
 	return 0;
 #if 0
 	struct athn_usb_tx_data *data = &usc->tx_cmd;
