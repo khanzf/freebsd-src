@@ -82,7 +82,9 @@ void		athn_btcoex_init(struct athn_softc *);
 void		athn_btcoex_enable(struct athn_softc *);
 void		athn_btcoex_disable(struct athn_softc *);
 void		athn_set_rxfilter(struct athn_softc *, uint32_t);
+#endif
 void		athn_get_chipid(struct athn_softc *);
+#if 0
 int		athn_reset_power_on(struct athn_softc *);
 int		athn_reset(struct athn_softc *, int);
 void		athn_init_pll(struct athn_softc *,
@@ -233,16 +235,20 @@ athn_config_ht(struct athn_softc *sc)
 	}
 }
 
+#endif
 int
 athn_attach(struct athn_softc *sc)
 {
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ifnet *ifp = &ic->ic_if;
-	int error;
+	printf("-- Comes to athn_attach! ----- \n");
+	//struct ieee80211com *ic = &sc->sc_ic;
+	//struct ifnet *ifp = &ic->ic_if;
+	//int error;
 
 	/* Read hardware revision. */
 	athn_get_chipid(sc);
 
+	return 0;
+#if 0
 	if ((error = athn_reset_power_on(sc)) != 0) {
 		printf("%s: could not reset chip\n", sc->sc_dev.dv_xname);
 		return (error);
@@ -401,8 +407,10 @@ athn_attach(struct athn_softc *sc)
 #endif
 
 	return (0);
+	#endif
 }
 
+#if 0
 void
 athn_detach(struct athn_softc *sc)
 {
@@ -568,12 +576,15 @@ athn_intr(void *xsc)
 	return (sc->ops.intr(sc));
 }
 
+#endif
 void
 athn_get_chipid(struct athn_softc *sc)
 {
 	uint32_t reg;
+	printf("Starting athn_get_chipid\n");
 
 	reg = AR_READ(sc, AR_SREV);
+	printf("Reg is %x %d\n", reg, reg);
 	if (MS(reg, AR_SREV_ID) == 0xff) {
 		sc->mac_ver = MS(reg, AR_SREV_VERSION2);
 		sc->mac_rev = MS(reg, AR_SREV_REVISION2);
@@ -585,7 +596,10 @@ athn_get_chipid(struct athn_softc *sc)
 		if (sc->mac_ver == AR_SREV_VERSION_5416_PCIE)
 			sc->flags |= ATHN_FLAG_PCIE;
 	}
+	printf("Exiting athn_get_chipid\n");
 }
+
+#if 0
 
 const char *
 athn_get_mac_name(struct athn_softc *sc)
