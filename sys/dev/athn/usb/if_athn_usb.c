@@ -431,7 +431,7 @@ athn_usb_attachhook(device_t self)
 {
 //	struct usb_attach_arg *uaa = device_get_ivars(self);
 	struct athn_usb_softc *usc = device_get_softc(self);
-//	struct athn_softc *sc = &usc->sc_sc;
+	struct athn_softc *sc = &usc->sc_sc;
 //	struct athn_ops *ops = &sc->ops;
 //	struct ieee80211com *ic = &sc->sc_ic;
 //	struct ifnet *ifp = &ic->ic_if;
@@ -455,14 +455,14 @@ athn_usb_attachhook(device_t self)
 	if (error != 0) {
 		return(ENXIO);
 	}
-#if 0
 	/* We're now ready to attach the bus agnostic driver. */
-	s = splnet();
+//	s = splnet();
 	error = athn_attach(sc);
 	if (error != 0) {
-		splx(s);
-		return;
+//		splx(s);
+		return (ENXIO);
 	}
+#if 0
 	usc->sc_athn_attached = 1;
 	/* Override some operations for USB. */
 	ifp->if_ioctl = athn_usb_ioctl;
@@ -959,6 +959,7 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	if (error == 0 && usc->wait_msg_id != 0) {
 		printf("Latter error! %d %d\n", error, usc->wait_msg_id);
 //		ATHN_LOCK(sc);
+	// XXX Update this in the future to check wakeup() value
 		tsleep(sc, 0, "athnfw", hz);
 		error = 0; // tsleep returning EWOULDBLOCK, why?
 //		error = mtx_sleep(sc, &sc->sc_mtx, 0 , "athnfw", hz);
@@ -1167,88 +1168,101 @@ int
 athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
     int ilen, void *obuf)
 {
-	printf("At athn_usb_wmi_xcmd, unimplemented\n");
-	return 0;
-#if 0
 	struct athn_usb_tx_data *data = &usc->tx_cmd;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_wmi_cmd_hdr *wmi;
-	int s, error;
+	int error;
 
-	if (usbd_is_dying(usc->sc_udev))
-		return ENXIO;
+//	if (usbd_is_dying(usc->sc_udev))
+//		return ENXIO;
 
-	s = splusb();
+//	s = splusb();
+	// REVISIT THIS CODE BELOW. WHY THE LOOP?!?!?!?
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	while (usc->wait_cmd_id) {
 		/*
 		 * The previous USB transfer is not done yet. We can't use
 		 * data->xfer until it is done or we'll cause major confusion
 		 * in the USB stack.
 		 */
-		tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmx",
-		    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
-		if (usbd_is_dying(usc->sc_udev)) {
-			splx(s);
-			return ENXIO;
-		}
+		tsleep(&usc->wait_cmd_id, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT);
+//		tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmx",
+//		    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
+//		if (usbd_is_dying(usc->sc_udev)) {
+//			splx(s);
+//			return ENXIO;
 	}
-	splx(s);
+//	splx(s);
 
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	htc = (struct ar_htc_frame_hdr *)data->buf;
 	memset(htc, 0, sizeof(*htc));
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	htc->endpoint_id = usc->ep_ctrl;
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	htc->payload_len = htobe16(sizeof(*wmi) + ilen);
 
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	wmi = (struct ar_wmi_cmd_hdr *)&htc[1];
 	wmi->cmd_id = htobe16(cmd_id);
 	usc->wmi_seq_no++;
 	wmi->seq_no = htobe16(usc->wmi_seq_no);
 
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	memcpy(&wmi[1], ibuf, ilen);
 
-	usbd_setup_xfer(data->xfer, usc->tx_intr_pipe, NULL, data->buf,
-	    sizeof(*htc) + sizeof(*wmi) + ilen,
-	    USBD_SHORT_XFER_OK | USBD_NO_COPY, ATHN_USB_CMD_TIMEOUT,
-	    NULL);
-	s = splusb();
-	error = usbd_transfer(data->xfer);
-	if (__predict_false(error != USBD_IN_PROGRESS && error != 0)) {
-		splx(s);
-		return (error);
-	}
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
+	usbd_transfer_start(usc->usc_xfer[ATHN_BULK_TX_INTR]);
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
+
+//	usbd_setup_xfer(data->xfer, usc->tx_intr_pipe, NULL, data->buf,
+//	    sizeof(*htc) + sizeof(*wmi) + ilen,
+//	    USBD_SHORT_XFER_OK | USBD_NO_COPY, ATHN_USB_CMD_TIMEOUT,
+//	    NULL);
+//	s = splusb();
+//	error = usbd_transfer(data->xfer);
+//	if (__predict_false(error != USBD_IN_PROGRESS && error != 0)) {
+//		splx(s);
+//		return (error);
+//	}
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	usc->obuf = obuf;
 	usc->wait_cmd_id = cmd_id;
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	/* 
 	 * Wait for WMI command complete interrupt. In case it does not fire
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
-	error = tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmi",
-	    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
+	error = tsleep(&usc->wait_cmd_id, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
+//	error = tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmi",
+//	    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
 	if (error) {
 		if (error == EWOULDBLOCK) {
-			printf("%s: firmware command 0x%x timed out\n",
-			    usc->usb_dev.dv_xname, cmd_id);
+			printf(": firmware command 0x%x timed out\n",
+			    cmd_id);
 			error = ETIMEDOUT;
 		}
 	}
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 
 	/* 
 	 * Both the WMI command and transfer are done or have timed out.
 	 * Allow other threads to enter this function and use data->xfer.
 	 */
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	usc->wait_cmd_id = 0;
 	wakeup(&usc->wait_cmd_id);
 
-	splx(s);
+	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
+//	splx(s);
 	return (error);
-#endif
 }
 
 int
 athn_usb_read_rom(struct athn_softc *sc)
 {
-	return 0;
-#if 0
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	uint32_t addrs[8], vals[8], addr;
 	uint16_t *eep;
@@ -1265,17 +1279,15 @@ athn_usb_read_rom(struct athn_softc *sc)
 		if (error != 0)
 			break;
 		for (j = 0; j < 8; j++)
-			*eep++ = betoh32(vals[j]);
+			*eep++ = htobe32(vals[j]);
 	}
 	return (error);
-#endif
 }
 
 uint32_t
 athn_usb_read(struct athn_softc *sc, uint32_t addr)
 {
-	return 0;
-#if 0
+	printf("Unimplemented athn_usb_read call, probably should implement this first\n");
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	uint32_t val;
 	int error;
@@ -1288,27 +1300,24 @@ athn_usb_read(struct athn_softc *sc, uint32_t addr)
 	    &addr, sizeof(addr), &val);
 	if (error != 0)
 		return (0xdeadbeef);
-	return (betoh32(val));
-#endif
+	return (htobe32(val));
 }
 
 void
 athn_usb_write(struct athn_softc *sc, uint32_t addr, uint32_t val)
 {
-#if 0
+	printf("athn_usb_write Currently unimplemented!\n");
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 
 	usc->wbuf[usc->wcount].addr = htobe32(addr);
 	usc->wbuf[usc->wcount].val  = htobe32(val);
 	if (++usc->wcount == AR_MAX_WRITE_COUNT)
 		athn_usb_write_barrier(sc);
-#endif
 }
 
 void
 athn_usb_write_barrier(struct athn_softc *sc)
 {
-#if 0
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 
 	if (usc->wcount == 0)
@@ -1317,7 +1326,6 @@ athn_usb_write_barrier(struct athn_softc *sc)
 	(void)athn_usb_wmi_xcmd(usc, AR_WMI_CMD_REG_WRITE,
 	    usc->wbuf, usc->wcount * sizeof(usc->wbuf[0]), NULL);
 	usc->wcount = 0;	/* Always flush buffer. */
-#endif
 }
 
 int
