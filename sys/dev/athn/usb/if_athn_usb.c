@@ -763,26 +763,21 @@ athn_usb_alloc_tx_cmd(struct athn_usb_softc *usc)
 
 	// STAILQ stuff
 
-	return 0;
-#if 0 // OpenBSD
 	struct athn_usb_tx_data *data = &usc->tx_cmd;
 
 	data->sc = usc;	/* Backpointer for callbacks. */
 
-	data->xfer = usbd_alloc_xfer(usc->sc_udev);
+	data->xfer = malloc(ATHN_USB_TXBUFSZ, M_USBDEV, M_NOWAIT | M_ZERO);
 	if (data->xfer == NULL) {
-		printf("%s: could not allocate xfer\n",
-		    usc->usb_dev.dv_xname);
+		printf(": could not allocate xfer\n");
 		return (ENOMEM);
 	}
-	data->buf = usbd_alloc_buffer(data->xfer, ATHN_USB_TXCMDSZ);
+	data->buf = malloc(ATHN_USB_TXCMDSZ, M_USBDEV, M_NOWAIT | M_ZERO);
 	if (data->buf == NULL) {
-		printf("%s: could not allocate xfer buffer\n",
-		    usc->usb_dev.dv_xname);
+		printf(": could not allocate xfer buffer\n");
 		return (ENOMEM);
 	}
 	return (0);
-#endif
 }
 
 void
@@ -1169,6 +1164,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
     int ilen, void *obuf)
 {
 	struct athn_usb_tx_data *data = &usc->tx_cmd;
+	struct athn_softc *sc = &usc->sc_sc;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_wmi_cmd_hdr *wmi;
 	int error;
@@ -1178,7 +1174,6 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 //	s = splusb();
 	// REVISIT THIS CODE BELOW. WHY THE LOOP?!?!?!?
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	while (usc->wait_cmd_id) {
 		/*
 		 * The previous USB transfer is not done yet. We can't use
@@ -1194,26 +1189,21 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	}
 //	splx(s);
 
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	htc = (struct ar_htc_frame_hdr *)data->buf;
 	memset(htc, 0, sizeof(*htc));
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	htc->endpoint_id = usc->ep_ctrl;
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	htc->payload_len = htobe16(sizeof(*wmi) + ilen);
 
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	wmi = (struct ar_wmi_cmd_hdr *)&htc[1];
 	wmi->cmd_id = htobe16(cmd_id);
 	usc->wmi_seq_no++;
 	wmi->seq_no = htobe16(usc->wmi_seq_no);
 
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	memcpy(&wmi[1], ibuf, ilen);
 
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
+	ATHN_LOCK(sc);
 	usbd_transfer_start(usc->usc_xfer[ATHN_BULK_TX_INTR]);
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
+	ATHN_UNLOCK(sc);
 
 //	usbd_setup_xfer(data->xfer, usc->tx_intr_pipe, NULL, data->buf,
 //	    sizeof(*htc) + sizeof(*wmi) + ilen,
@@ -1225,17 +1215,13 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 //		splx(s);
 //		return (error);
 //	}
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	usc->obuf = obuf;
 	usc->wait_cmd_id = cmd_id;
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	/* 
 	 * Wait for WMI command complete interrupt. In case it does not fire
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	error = tsleep(&usc->wait_cmd_id, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 //	error = tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmi",
 //	    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
 	if (error) {
@@ -1245,13 +1231,11 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 			error = ETIMEDOUT;
 		}
 	}
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 
 	/* 
 	 * Both the WMI command and transfer are done or have timed out.
 	 * Allow other threads to enter this function and use data->xfer.
 	 */
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 	usc->wait_cmd_id = 0;
 	wakeup(&usc->wait_cmd_id);
 
@@ -1298,6 +1282,7 @@ athn_usb_read(struct athn_softc *sc, uint32_t addr)
 	addr = htobe32(addr);
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_REG_READ,
 	    &addr, sizeof(addr), &val);
+	printf("THIS DROPS AN IERROR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 	if (error != 0)
 		return (0xdeadbeef);
 	return (htobe32(val));
