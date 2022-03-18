@@ -596,6 +596,10 @@ athn_get_chipid(struct athn_softc *sc)
 		if (sc->mac_ver == AR_SREV_VERSION_5416_PCIE)
 			sc->flags |= ATHN_FLAG_PCIE;
 	}
+
+	printf("The mac ver is 0x%x\n", sc->mac_ver);
+	printf("The mac rev is 0x%x\n", sc->mac_rev);
+
 	printf("Exiting athn_get_chipid\n");
 }
 
