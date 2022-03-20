@@ -224,8 +224,10 @@ void		athn_updateslot(struct ieee80211com *);
 
 
 /* FreeBSD additions */
-void athn_bulk_rx_callback(struct usb_xfer *, usb_error_t);
-void athn_bulk_tx_callback(struct usb_xfer *, usb_error_t);
+void athn_bulk_intr_rx_callback(struct usb_xfer *, usb_error_t);
+void athn_bulk_intr_tx_callback(struct usb_xfer *, usb_error_t);
+void athn_bulk_data_rx_callback(struct usb_xfer *, usb_error_t);
+void athn_bulk_data_tx_callback(struct usb_xfer *, usb_error_t);
 
 #define ATHN_USB_DEV(v, p) { USB_VPI(v, p, 0) }
 static const STRUCT_USB_HOST_ID athn_devs[] = {
@@ -254,7 +256,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 //			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
-		.callback = athn_bulk_tx_callback,
+		.callback = athn_bulk_data_tx_callback,
 	},
 	[ATHN_BULK_RX_DATA] = {
 		.type = UE_BULK,
@@ -265,7 +267,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 //			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
-		.callback = athn_bulk_rx_callback,
+		.callback = athn_bulk_data_rx_callback,
 	},
 	[ATHN_BULK_RX_INTR] = {
 		.type = UE_INTERRUPT,
@@ -276,7 +278,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 //			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
-		.callback = athn_bulk_rx_callback,
+		.callback = athn_bulk_intr_rx_callback,
 	},
 	[ATHN_BULK_TX_INTR] = {
 		.type = UE_INTERRUPT,
@@ -287,26 +289,110 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 //			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
-		.callback= athn_bulk_tx_callback,
+		.callback= athn_bulk_intr_tx_callback,
 	}
 };
 
 /* FreeBSD additions */
 void
-athn_bulk_rx_callback(struct usb_xfer *xfer, usb_error_t error)
+athn_bulk_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
-	printf("athn_bulk_rx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
+	printf("athn_bulk_data_rx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
+	int actlen;
+
+	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
+
+	switch(USB_GET_STATE(xfer)) {
+	case USB_ST_SETUP:
+		printf("USB_ST_SETUP athn_bulk_data_rx_callback\n");
+		usbd_transfer_submit(xfer);
+		break;
+	case USB_ST_TRANSFERRED:
+		printf("USB_ST_TRANSFERRED athn_bulk_data_rx_callback\n");
+		break;
+	default: /* Error */
+		printf("Error for athn_bulk_data_rx_callback\n");
+		break;
+	}
+
+	return;
 }
 
 
 /* FreeBSD additions */
 void
-athn_bulk_tx_callback(struct usb_xfer *xfer, usb_error_t error)
+athn_bulk_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
-	printf("athn_bulk_tx_callback should happen a few times!!!!!!!!!!!!!\n");
+	printf("athn_bulk_data_tx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
+	int actlen;
+
+	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
+
+	switch(USB_GET_STATE(xfer)) {
+	case USB_ST_SETUP:
+		printf("USB_ST_SETUP athn_bulk_data_tx_callback\n");
+		usbd_transfer_submit(xfer);
+		break;
+	case USB_ST_TRANSFERRED:
+		printf("USB_ST_TRANSFERRED athn_bulk_data_tx_callback\n");
+		break;
+	default: /* Error */
+		printf("Error for athn_bulk_data_tx_callback\n");
+		break;
+	}
+
+	return;
 }
 
+/* FreeBSD additions */
+void
+athn_bulk_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
+{
+	printf("athn_bulk_intr_rx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
+	int actlen;
 
+	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
+
+	switch(USB_GET_STATE(xfer)) {
+	case USB_ST_SETUP:
+		printf("USB_ST_SETUP athn_bulk_intr_rx_callback\n");
+		usbd_transfer_submit(xfer);
+		break;
+	case USB_ST_TRANSFERRED:
+		printf("USB_ST_TRANSFERRED athn_bulk_intr_rx_callback\n");
+		break;
+	default: /* Error */
+		printf("Error for athn_bulk_intr_rx_callback\n");
+		break;
+	}
+
+	return;
+}
+
+/* FreeBSD additions */
+void
+athn_bulk_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
+{
+	printf("athn_bulk_intr_tx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
+	int actlen;
+
+	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
+
+	switch(USB_GET_STATE(xfer)) {
+	case USB_ST_SETUP:
+		printf("USB_ST_SETUP athn_bulk_intr_tx_callback\n");
+		usbd_transfer_submit(xfer);
+		break;
+	case USB_ST_TRANSFERRED:
+		printf("USB_ST_TRANSFERRED athn_bulk_intr_tx_callback\n");
+		break;
+	default: /* Error */
+		printf("Error for athn_bulk_intr_tx_callback\n");
+		break;
+	}
+
+	return;
+}
 /* End of FreeBSD additions */
 
 static int
@@ -755,7 +841,8 @@ athn_usb_alloc_tx_cmd(struct athn_usb_softc *usc)
 	int error;
 	printf("athn_usb_alloc_tx_cmd starting\n");
 
-	error = athn_usb_alloc_list(sc, usc->usc_cmd, ATHN_USB_CMD_LIST_COUNT, ATHN_USB_TXCMDSZ);
+	error = athn_usb_alloc_list(sc, usc->usc_cmd,
+		ATHN_USB_CMD_LIST_COUNT, ATHN_USB_TXCMDSZ);
 	if (error)
 		return (error);
 
@@ -993,27 +1080,13 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
 
 	memcpy(&msg[1], buf, len);
 
-
-//	uint8_t iface_index = ATHN_IFACE_INDEX;
-//	int ret = ENXIO;
-
-	printf("----------START\n");
+	printf("START usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 	usbd_transfer_start(usc->usc_xfer[ATHN_BULK_TX_INTR]);
-	printf("----------END\n");
+	printf("END   usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 
 	return 0;
 #if 0
 
-	error = usbd_transfer_setup(
-		uaa->device,		// udev
-		&iface_index,		// ifaces
-		sc->sc_xfer,		// xfer
-		athn_config_common,	//
-		ATHN_N_TRANSFERS,
-		sc,
-		&sc->sc_mtx);
-
-//	usbd_transfer_setup
 	usbd_setup_xfer(
 		data->xfer,				// xfer
 		usc->tx_intr_pipe,		// pipe
@@ -1079,7 +1152,7 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	cfg.pipe_id = UE_GET_ADDR(AR_PIPE_TX_DATA);
 	cfg.credits = (usc->flags & ATHN_USB_FLAG_AR7010) ? 45 : 33;
 	usc->wait_msg_id = AR_HTC_MSG_CONF_PIPE_RSP;
-	printf("Ending after 1 iteration, delete me later\n");
+	// XXX Come back to this maybe?
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
 	if (error == 0 && usc->wait_msg_id != 0) {
 		tsleep(sc, 0, "athnhtc", hz);
@@ -1097,8 +1170,6 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 		return (error);
 	}
 	return (0);
-#if 0
-#endif
 }
 
 int
@@ -1114,28 +1185,16 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 	msg.svc_id = htobe16(svc_id);
 	msg.dl_pipeid = UE_GET_ADDR(dl_pipe);
 	msg.ul_pipeid = UE_GET_ADDR(ul_pipe);
-//	s = splusb();
 	usc->msg_conn_svc_rsp = &rsp;
 	usc->wait_msg_id = AR_HTC_MSG_CONN_SVC_RSP;
 
-	return 0;
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONN_SVC, &msg, sizeof(msg));
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0) {
 		printf("Sleep here Line: %d\n", __LINE__);
-//		ATHN_LOCK(sc);
 //		error = mtx_sleep(usc, &sc->sc_mtx, 0, "athnhtc", hz);
-		tsleep(sc, 0, "athnfw", hz);
-		error = 0;
-//		if (error == EINTR)
-//			printf("EINTR on line %d\n", __LINE__);
-//		else if (error == ERESTART)
-//			printf("ERESTART on line %d\n", __LINE__);
-//		else if (error == EWOULDBLOCK)
-//			printf("EWOULDBLOCK on %d\n", __LINE__);
-//		else
-//			printf("Clear on %d\n", __LINE__);
-//		ATHN_UNLOCK(sc);
+		error = tsleep(sc, 0, "athnfw", hz);
+		//error = 0;
 	}
 	usc->wait_msg_id = 0;
 //	splx(s);
@@ -1202,6 +1261,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	memcpy(&wmi[1], ibuf, ilen);
 
 	ATHN_LOCK(sc);
+	printf("Sending usbd_transfer_start sent from %d\n", __LINE__);
 	usbd_transfer_start(usc->usc_xfer[ATHN_BULK_TX_INTR]);
 	ATHN_UNLOCK(sc);
 
