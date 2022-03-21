@@ -174,7 +174,7 @@ void		athn_usb_bcneof(struct usbd_xfer *, void *);
 void		athn_usb_swba(struct athn_usb_softc *);
 void		athn_usb_tx_status(void *, struct ieee80211_node *);
 void		athn_usb_rx_wmi_ctrl(struct athn_usb_softc *, uint8_t *, int);
-void		athn_usb_intr(struct usbd_xfer *, void *);
+void		athn_usb_intr(struct usb_xfer *, usb_error_t);
 void		athn_usb_rx_radiotap(struct athn_softc *, struct mbuf *,
 		    struct ar_rx_status *);
 void		athn_usb_rx_frame(struct athn_usb_softc *, struct mbuf *);
@@ -224,10 +224,10 @@ void		athn_updateslot(struct ieee80211com *);
 
 
 /* FreeBSD additions */
-void athn_bulk_intr_rx_callback(struct usb_xfer *, usb_error_t);
-void athn_bulk_intr_tx_callback(struct usb_xfer *, usb_error_t);
-void athn_bulk_data_rx_callback(struct usb_xfer *, usb_error_t);
-void athn_bulk_data_tx_callback(struct usb_xfer *, usb_error_t);
+//void athn_intr_rx_callback(struct usb_xfer *, usb_error_t);
+void athn_intr_tx_callback(struct usb_xfer *, usb_error_t);
+void athn_data_rx_callback(struct usb_xfer *, usb_error_t);
+void athn_data_tx_callback(struct usb_xfer *, usb_error_t);
 
 #define ATHN_USB_DEV(v, p) { USB_VPI(v, p, 0) }
 static const STRUCT_USB_HOST_ID athn_devs[] = {
@@ -256,7 +256,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 //			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
-		.callback = athn_bulk_data_tx_callback,
+		.callback = athn_data_tx_callback,
 	},
 	[ATHN_BULK_RX_DATA] = {
 		.type = UE_BULK,
@@ -267,7 +267,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 //			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
-		.callback = athn_bulk_data_rx_callback,
+		.callback = athn_data_rx_callback,
 	},
 	[ATHN_BULK_RX_INTR] = {
 		.type = UE_INTERRUPT,
@@ -278,7 +278,8 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 //			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
-		.callback = athn_bulk_intr_rx_callback,
+		.callback = athn_usb_intr,
+//		.callback = athn_intr_rx_callback,
 	},
 	[ATHN_BULK_TX_INTR] = {
 		.type = UE_INTERRUPT,
@@ -289,29 +290,29 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 //			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
-		.callback= athn_bulk_intr_tx_callback,
+		.callback= athn_intr_tx_callback,
 	}
 };
 
 /* FreeBSD additions */
 void
-athn_bulk_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
+athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
-	printf("athn_bulk_data_rx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
+	printf("athn_data_rx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
 	int actlen;
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_SETUP:
-		printf("USB_ST_SETUP athn_bulk_data_rx_callback\n");
+		printf("USB_ST_SETUP athn_data_rx_callback\n");
 		usbd_transfer_submit(xfer);
 		break;
 	case USB_ST_TRANSFERRED:
-		printf("USB_ST_TRANSFERRED athn_bulk_data_rx_callback\n");
+		printf("USB_ST_TRANSFERRED athn_data_rx_callback\n");
 		break;
 	default: /* Error */
-		printf("Error for athn_bulk_data_rx_callback\n");
+		printf("Error for athn_data_rx_callback\n");
 		break;
 	}
 
@@ -321,23 +322,23 @@ athn_bulk_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 /* FreeBSD additions */
 void
-athn_bulk_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
+athn_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
-	printf("athn_bulk_data_tx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
+	printf("athn_data_tx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
 	int actlen;
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_SETUP:
-		printf("USB_ST_SETUP athn_bulk_data_tx_callback\n");
+		printf("USB_ST_SETUP athn_data_tx_callback\n");
 		usbd_transfer_submit(xfer);
 		break;
 	case USB_ST_TRANSFERRED:
-		printf("USB_ST_TRANSFERRED athn_bulk_data_tx_callback\n");
+		printf("USB_ST_TRANSFERRED athn_data_tx_callback\n");
 		break;
 	default: /* Error */
-		printf("Error for athn_bulk_data_tx_callback\n");
+		printf("Error for athn_data_tx_callback\n");
 		break;
 	}
 
@@ -346,48 +347,26 @@ athn_bulk_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 /* FreeBSD additions */
 void
-athn_bulk_intr_rx_callback(struct usb_xfer *xfer, usb_error_t error)
+athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
-	printf("athn_bulk_intr_rx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
 	int actlen;
+	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
+	struct athn_usb_tx_data *data = &usc->tx_cmd;
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_SETUP:
-		printf("USB_ST_SETUP athn_bulk_intr_rx_callback\n");
+		printf("USB_ST_SETUP athn_intr_tx_callback\n");
+		usbd_xfer_set_frame_data(xfer, 0, data->buf,
+			usbd_xfer_max_len(xfer));
 		usbd_transfer_submit(xfer);
 		break;
 	case USB_ST_TRANSFERRED:
-		printf("USB_ST_TRANSFERRED athn_bulk_intr_rx_callback\n");
+		printf("USB_ST_TRANSFERRED athn_intr_tx_callback\n");
 		break;
 	default: /* Error */
-		printf("Error for athn_bulk_intr_rx_callback\n");
-		break;
-	}
-
-	return;
-}
-
-/* FreeBSD additions */
-void
-athn_bulk_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
-{
-	printf("athn_bulk_intr_tx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
-	int actlen;
-
-	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
-
-	switch(USB_GET_STATE(xfer)) {
-	case USB_ST_SETUP:
-		printf("USB_ST_SETUP athn_bulk_intr_tx_callback\n");
-		usbd_transfer_submit(xfer);
-		break;
-	case USB_ST_TRANSFERRED:
-		printf("USB_ST_TRANSFERRED athn_bulk_intr_tx_callback\n");
-		break;
-	default: /* Error */
-		printf("Error for athn_bulk_intr_tx_callback\n");
+		printf("Error for athn_intr_tx_callback\n");
 		break;
 	}
 
@@ -523,8 +502,6 @@ athn_usb_attachhook(device_t self)
 //	struct ifnet *ifp = &ic->ic_if;
 //	int s, i, error;
 	int error;
-
-	printf("Enters athn_usb_htc_setup\n");
 
 	/* Load firmware. */
 	error = athn_usb_load_firmware(usc);
@@ -1067,8 +1044,7 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
 	struct athn_usb_tx_data *data = &usc->tx_cmd;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_htc_msg_hdr *msg;
-
-	return 0;
+	struct athn_softc *sc = &usc->sc_sc;
 
 	htc = (struct ar_htc_frame_hdr *)data->buf;
 	memset(htc, 0, sizeof(*htc));
@@ -1080,9 +1056,11 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
 
 	memcpy(&msg[1], buf, len);
 
+	ATHN_LOCK(sc);
 	printf("START usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 	usbd_transfer_start(usc->usc_xfer[ATHN_BULK_TX_INTR]);
 	printf("END   usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
+	ATHN_UNLOCK(sc);
 
 	return 0;
 #if 0
@@ -1155,8 +1133,7 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	// XXX Come back to this maybe?
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
 	if (error == 0 && usc->wait_msg_id != 0) {
-		tsleep(sc, 0, "athnhtc", hz);
-		error = 0;
+		error = tsleep(sc, 0, "athnhtc", hz);
 	}
 	usc->wait_msg_id = 0;
 	if (error != 0) {
@@ -1192,10 +1169,12 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0) {
 		printf("Sleep here Line: %d\n", __LINE__);
-//		error = mtx_sleep(usc, &sc->sc_mtx, 0, "athnhtc", hz);
 		error = tsleep(sc, 0, "athnfw", hz);
-		//error = 0;
 	}
+	printf("Values  EINTR                  %d\n", EINTR);
+	printf("Values: ERESTART               %d\n", ERESTART);
+	printf("Values  EWOULDBLOCK            %d\n", EWOULDBLOCK);
+	printf("The end result of the sleep is %d\n", error);
 	usc->wait_msg_id = 0;
 //	splx(s);
 	if (error != 0) {
@@ -1261,8 +1240,9 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	memcpy(&wmi[1], ibuf, ilen);
 
 	ATHN_LOCK(sc);
-	printf("Sending usbd_transfer_start sent from %d\n", __LINE__);
+	printf("2nd START usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 	usbd_transfer_start(usc->usc_xfer[ATHN_BULK_TX_INTR]);
+	printf("2nd END   usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 	ATHN_UNLOCK(sc);
 
 //	usbd_setup_xfer(data->xfer, usc->tx_intr_pipe, NULL, data->buf,
@@ -2333,8 +2313,35 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 }
 
 void
-athn_usb_intr(struct usbd_xfer *xfer, void *priv)
+athn_usb_intr(struct usb_xfer *xfer, usb_error_t error)
 {
+	printf("THIS IS WHAT I AM LOOKING FOR!!!!!!!!!!!!!!!\n");
+	printf("THIS IS WHAT I AM LOOKING FOR!!!!!!!!!!!!!!!\n");
+	printf("THIS IS WHAT I AM LOOKING FOR!!!!!!!!!!!!!!!\n");
+	printf("THIS IS WHAT I AM LOOKING FOR!!!!!!!!!!!!!!!\n");
+	printf("athn_intr_rx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
+	int actlen;
+	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
+	struct athn_usb_tx_data *data = &usc->tx_cmd;
+
+	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
+
+	switch(USB_GET_STATE(xfer)) {
+	case USB_ST_SETUP:
+		printf("USB_ST_SETUP athn_intr_rx_callback\n");
+		usbd_xfer_set_frame_data(xfer, 0, data->buf,
+			usbd_xfer_max_len(xfer));
+		usbd_transfer_submit(xfer);
+		break;
+	case USB_ST_TRANSFERRED:
+		printf("USB_ST_TRANSFERRED athn_intr_rx_callback\n");
+		break;
+	default: /* Error */
+		printf("Error for athn_intr_rx_callback\n");
+		break;
+	}
+
+	return;
 #if 0
 	struct athn_usb_softc *usc = priv;
 	struct ar_htc_frame_hdr *htc;
