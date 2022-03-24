@@ -23,10 +23,10 @@
 
 // XXX TODO: Figure out what the enum should look like with WME_AC_BE, might not be relevant
 enum {
-	ATHN_BULK_TX_DATA,
-	ATHN_BULK_RX_DATA,
-	ATHN_BULK_RX_INTR,
-	ATHN_BULK_TX_INTR,
+	ATHN_TX_DATA,
+	ATHN_RX_DATA,
+	ATHN_RX_INTR,
+	ATHN_TX_INTR,
 	ATHN_N_TRANSFERS, // A semi-copy from RTWN_N_TRANSFER
 };
 
