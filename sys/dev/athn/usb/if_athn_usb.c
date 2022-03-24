@@ -247,9 +247,9 @@ const struct cfattach athn_usb_ca = {
 #define ATHN_CONFIG_INDEX	0
 
 static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
-	[ATHN_BULK_TX_DATA] = {
+	[ATHN_TX_DATA] = {
 		.type = UE_BULK,
-		.endpoint = AR_PIPE_TX_DATA,
+		.endpoint = 0x01, // AR_PIPE_TX_DATA,
 		.direction = UE_DIR_OUT,
 		.flags = {
 			.short_xfer_ok = 1,
@@ -258,9 +258,9 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 		},
 		.callback = athn_data_tx_callback,
 	},
-	[ATHN_BULK_RX_DATA] = {
+	[ATHN_RX_DATA] = {
 		.type = UE_BULK,
-		.endpoint = AR_PIPE_RX_DATA,
+		.endpoint = 0x82, //AR_PIPE_RX_DATA,
 		.direction = UE_DIR_IN,
 		.flags = {
 			.short_xfer_ok = 1,
@@ -269,9 +269,9 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 		},
 		.callback = athn_data_rx_callback,
 	},
-	[ATHN_BULK_RX_INTR] = {
+	[ATHN_RX_INTR] = {
 		.type = UE_INTERRUPT,
-		.endpoint = AR_PIPE_RX_INTR,
+		.endpoint = 0x83, // AR_PIPE_RX_INTR,
 		.direction = UE_DIR_IN,
 		.flags = {
 			.short_xfer_ok = 1,
@@ -281,9 +281,9 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 		.callback = athn_usb_intr,
 //		.callback = athn_intr_rx_callback,
 	},
-	[ATHN_BULK_TX_INTR] = {
+	[ATHN_TX_INTR] = {
 		.type = UE_INTERRUPT,
-		.endpoint = AR_PIPE_TX_INTR,
+		.endpoint = 0x04, //AR_PIPE_TX_INTR,
 		.direction = UE_DIR_OUT,
 		.flags = {
 			.short_xfer_ok = 1,
@@ -1019,8 +1019,7 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		printf("Latter error! %d %d\n", error, usc->wait_msg_id);
 //		ATHN_LOCK(sc);
 	// XXX Update this in the future to check wakeup() value
-		tsleep(sc, 0, "athnfw", hz);
-		error = 0; // tsleep returning EWOULDBLOCK, why?
+		error = tsleep(sc, 0, "athnfw", hz);
 //		error = mtx_sleep(sc, &sc->sc_mtx, 0 , "athnfw", hz);
 //		if (error == EINTR)
 //			printf("EINTR on line %d\n", __LINE__);
@@ -1033,7 +1032,7 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 //		ATHN_UNLOCK(sc);
 	}
 	usc->wait_msg_id = 0;
-	printf("sending bavk %d\n", error);
+	printf("sending back %d\n", error);
 	return (error);
 }
 
@@ -1058,7 +1057,7 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
 
 	ATHN_LOCK(sc);
 	printf("START usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
-	usbd_transfer_start(usc->usc_xfer[ATHN_BULK_TX_INTR]);
+	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
 	printf("END   usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 	ATHN_UNLOCK(sc);
 
@@ -1241,7 +1240,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 	ATHN_LOCK(sc);
 	printf("2nd START usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
-	usbd_transfer_start(usc->usc_xfer[ATHN_BULK_TX_INTR]);
+	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
 	printf("2nd END   usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 	ATHN_UNLOCK(sc);
 
