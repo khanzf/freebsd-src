@@ -276,7 +276,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 		.flags = {
 			.short_xfer_ok = 1,
 //			.force_short_xfer = 1,
-//			.pipe_bof = 1
+			.pipe_bof = 1
 		},
 		.callback = athn_usb_intr,
 //		.callback = athn_intr_rx_callback,
@@ -974,8 +974,30 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		addr += mlen >> 8;
 		ptr += mlen;
 		size -= mlen;
+		printf("Load loop\n");
 	}
 	ATHN_UNLOCK(sc);
+
+
+	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
+	req.bRequest = AR_FW_DOWNLOAD_COMP;
+	USETW(req.wIndex, 0);
+	USETW(req.wValue, addr);
+	USETW(req.wLength, 0);
+	usc->wait_msg_id = AR_HTC_MSG_READY;
+	ATHN_LOCK(sc);
+	error = usbd_do_request(usc->sc_udev, &sc->sc_mtx, &req, NULL);
+	ATHN_UNLOCK(sc);
+	if (error == 0 && usc->wait_msg_id != 0) {
+		printf("Error is %d\n", error);
+		error = tsleep(&usc->wait_msg_id, 0, "athnfw", 5);
+		if (error) {
+			printf("Exiting condition %d\n", error);
+			return error;
+		}
+	}
+
+	usc->wait_msg_id = 0;
 
 	firmware_put(fw, FIRMWARE_UNLOAD);
 	if (error != 0)
@@ -2479,7 +2501,9 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 		printf("====USB_ST_SETUP       athn_usb_intr\n");
 		printf("====Frame size: %d\n", usbd_xfer_max_len(xfer));
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
+		printf("End condition 1\n");
 		usbd_transfer_submit(xfer);
+		printf("End condition 2\n");
 		break;
 	case USB_ST_ERROR:
 		printf("====USB_ST_ERROR       athn_usb_intr\n");
