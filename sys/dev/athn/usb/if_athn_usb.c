@@ -952,15 +952,15 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		return (ENOENT);
 	}
 
+	ptr = __DECONST(char *, fw->data);
+	addr = AR9271_FIRMWARE >> 8;
+
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
 	req.bRequest = AR_FW_DOWNLOAD;
 	USETW(req.wIndex, 0);
 
-	ATHN_LOCK(sc);
-	ptr = __DECONST(char *, fw->data);
-//	addr >>= 8;
 	size = fw->datasize;
-	addr = AR9271_FIRMWARE >> 8;
+	ATHN_LOCK(sc);
 	while (size > 0) {
 		mlen = MIN(size, 4096);
 
