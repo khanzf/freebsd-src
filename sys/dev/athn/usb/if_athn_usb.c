@@ -987,15 +987,20 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	usc->wait_msg_id = AR_HTC_MSG_READY;
 	ATHN_LOCK(sc);
 	error = usbd_do_request(usc->sc_udev, &sc->sc_mtx, &req, NULL);
-	ATHN_UNLOCK(sc);
 	if (error == 0 && usc->wait_msg_id != 0) {
 		printf("Error is %d\n", error);
-		error = tsleep(&usc->wait_msg_id, 0, "athnfw", 5);
+//		error = tsleep(&usc->wait_msg_id, 0, "athnfw", hz); /* Wait 1 second at most */
+		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnfw", hz); /* Wait 1 second at most */
+
+//		msleep(const void *chan, struct mtx *mtx, int priority, const char *wmesg, int timo);
+
 		if (error) {
+			ATHN_UNLOCK(sc);
 			printf("Exiting condition %d\n", error);
 			return error;
 		}
 	}
+	ATHN_UNLOCK(sc);
 
 	usc->wait_msg_id = 0;
 
@@ -1108,7 +1113,7 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		printf("Latter error! %d %d\n", error, usc->wait_msg_id);
 //		ATHN_LOCK(sc);
 	// XXX Update this in the future to check wakeup() value
-		error = tsleep(sc, 0, "athnfw", 2);
+		error = tsleep(sc, 0, "athnfw", hz);
 //		error = mtx_sleep(sc, &sc->sc_mtx, 0 , "athnfw", hz);
 //		if (error == EINTR)
 //			printf("EINTR on line %d\n", __LINE__);
@@ -1258,7 +1263,7 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0) {
 		printf("Sleep here Line: %d\n", __LINE__);
-		error = tsleep(sc, 0, "athnhtc", 1);
+		error = tsleep(sc, 0, "athnhtc", hz);
 	}
 	printf("Values  EINTR                  %d\n", EINTR);
 	printf("Values: ERESTART               %d\n", ERESTART);
@@ -2419,7 +2424,7 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
-		printf("====USB_ST_TRANSFERRED athn_usb_intr\n");
+		printf("====USB_ST_TRANSFERRED athn_usb_intr THIS IS GOOD!!\n");
 		pc = usbd_xfer_get_frame(xfer, 0);
 		usbd_copy_out(pc, 0, usc->ibuf, actlen);
 		len = actlen;
@@ -2504,6 +2509,7 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 		printf("End condition 1\n");
 		usbd_transfer_submit(xfer);
 		printf("End condition 2\n");
+		printf("End of USB_ST_SETUP\n");
 		break;
 	case USB_ST_ERROR:
 		printf("====USB_ST_ERROR       athn_usb_intr\n");
