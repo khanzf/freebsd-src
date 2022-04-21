@@ -298,21 +298,23 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 void
 athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
-//	printf("athn_data_rx_callback!!!!!!!!!!!!!!!!!!!!!!!\n");
 	int actlen;
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	switch(USB_GET_STATE(xfer)) {
+	case USB_ST_TRANSFERRED:
+		printf("athn_data_rx_callback USB_ST_TRANSFERRED\n");
+//		printf("USB_ST_TRANSFERRED athn_data_rx_callback\n");
+		/* XXX Fall through */
 	case USB_ST_SETUP:
 //		printf("USB_ST_SETUP athn_data_rx_callback\n");
+		printf("athn_data_rx_callback USB_ST_SETUP\n");
+		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
 		usbd_transfer_submit(xfer);
 		break;
-	case USB_ST_TRANSFERRED:
-//		printf("USB_ST_TRANSFERRED athn_data_rx_callback\n");
-		break;
 	default: /* Error */
-//		printf("Error for athn_data_rx_callback\n");
+		printf("Error for athn_data_rx_callback\n");
 		break;
 	}
 
@@ -2501,12 +2503,10 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 			printf("====HTC message %d ignored\n", msg_id); // This should be a debug message?
 			break;
 		}
-		break;
+		/* XXX Fallthrough */
 	case USB_ST_SETUP:
 		printf("====USB_ST_SETUP       athn_usb_intr\n");
-		printf("====Frame size: %d\n", usbd_xfer_max_len(xfer));
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
-		printf("End condition 1\n");
 		usbd_transfer_submit(xfer);
 		printf("End condition 2\n");
 		printf("End of USB_ST_SETUP\n");
