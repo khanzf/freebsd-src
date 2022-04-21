@@ -257,6 +257,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 			.pipe_bof = 1
 		},
 		.callback = athn_data_tx_callback,
+		.bufsize = 0x200,
 	},
 	[ATHN_RX_DATA] = {
 		.type = UE_BULK,
@@ -268,6 +269,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 			.pipe_bof = 1
 		},
 		.callback = athn_data_rx_callback,
+		.bufsize = 0x200,
 	},
 	[ATHN_RX_INTR] = {
 		.type = UE_INTERRUPT,
@@ -279,6 +281,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 			.pipe_bof = 1
 		},
 		.callback = athn_usb_intr,
+		.bufsize = 0x40,
 //		.callback = athn_intr_rx_callback,
 	},
 	[ATHN_TX_INTR] = {
@@ -291,6 +294,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 			.pipe_bof = 1
 		},
 		.callback= athn_intr_tx_callback,
+		.bufsize = 0x40,
 	}
 };
 
