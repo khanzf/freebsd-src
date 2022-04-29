@@ -303,7 +303,7 @@ void
 athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
 	int actlen;
-
+	struct usb_page_cache *pc;
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	switch(USB_GET_STATE(xfer)) {
@@ -313,8 +313,10 @@ athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 		/* XXX Fall through */
 	case USB_ST_SETUP:
 //		printf("USB_ST_SETUP athn_data_rx_callback\n");
+		pc = usbd_xfer_get_frame(xfer, 0);
 		printf("athn_data_rx_callback USB_ST_SETUP\n");
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
+		printf("FRAME LENGTH = %d\n", usbd_xfer_max_len(xfer));
 		usbd_transfer_submit(xfer);
 		break;
 	default: /* Error */
@@ -412,7 +414,7 @@ athn_usb_attach(device_t self)
 	int error;
 
 	ic->ic_name = device_get_nameunit(self);
-	printf("%p %p %p %s\n", usc, uaa, sc, ic->ic_name);
+//	printf("%p %p %p %s\n", usc, uaa, sc, ic->ic_name);
 
 //	int error;
 	usc->sc_udev = uaa->device;
@@ -610,7 +612,8 @@ athn_usb_open_pipes(struct athn_usb_softc *usc, device_t dev)
 
 	printf("Start of running initial interrupts\n");
 	ATHN_LOCK(sc);
-	usbd_transfer_start(usc->usc_xfer[ATHN_RX_DATA]);
+	// Commenting out after wireshark analysis
+//	usbd_transfer_start(usc->usc_xfer[ATHN_RX_DATA]);
 	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
 	ATHN_UNLOCK(sc);
 	printf("End of running initial interrupts\n");
@@ -952,6 +955,7 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	/* Read firmware image from the filesystem */
 	ATHN_LOCK(sc);
 	fw = firmware_get(sc->fwname);
+	printf("The size of the fw is: %zu\n", fw->datasize);
 	ATHN_UNLOCK(sc);
 	if (fw == NULL) {
 		device_printf(sc->sc_dev, "failed to load of file %s\n", sc->fwname);
@@ -984,6 +988,7 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	}
 	ATHN_UNLOCK(sc);
 
+	addr = AR9271_FIRMWARE_TEXT >> 8;
 
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
 	req.bRequest = AR_FW_DOWNLOAD_COMP;
@@ -2511,6 +2516,7 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 	case USB_ST_SETUP:
 		printf("====USB_ST_SETUP       athn_usb_intr\n");
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
+		printf("FRAME LENGTH = %d\n", usbd_xfer_max_len(xfer));
 		usbd_transfer_submit(xfer);
 		printf("End condition 2\n");
 		printf("End of USB_ST_SETUP\n");
