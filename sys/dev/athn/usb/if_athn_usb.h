@@ -33,6 +33,7 @@ enum {
 	ATHN_CHIP_MAX_USB
 };
 
+/*
 struct athn_data {
 	uint8_t		*buf;
 	int			id;
@@ -42,6 +43,7 @@ struct athn_data {
 	STAILQ_ENTRY(athn_data)	next;
 };
 typedef STAILQ_HEAD(, athn_data) athn_datahead;
+*/
 
 /* various supported device vendors/products */
 typedef void	(*chip_usb_attach)(struct athn_usb_softc *);
@@ -439,6 +441,7 @@ struct athn_usb_tx_data {
 	struct athn_usb_softc		*sc;
 	struct usbd_xfer		*xfer;
 	uint8_t				*buf;
+	uint32_t			len; // FreeBSD addition
 	TAILQ_ENTRY(athn_usb_tx_data)	next;
 };
 
@@ -534,6 +537,8 @@ struct athn_usb_softc {
 	int				sc_key_tasks;
 
 	/* FreeBSD additions */
-	struct athn_data	usc_cmd[ATHN_USB_CMD_LIST_COUNT];
+//	struct athn_data	usc_cmd[ATHN_USB_CMD_LIST_COUNT];
 	struct usb_xfer		*usc_xfer[ATHN_N_TRANSFERS];
+
+//	STAILQ_HEAD(, athn_data)	tx_intr_queue;
 };
