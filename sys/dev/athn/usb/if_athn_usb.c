@@ -361,17 +361,46 @@ athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
 	struct athn_usb_tx_data *data = &usc->tx_cmd;
 
+//	struct athn_data *data;
+
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	switch(USB_GET_STATE(xfer)) {
-	case USB_ST_SETUP:
-		printf("USB_ST_SETUP athn_intr_tx_callback\n");
-		usbd_xfer_set_frame_data(xfer, 0, data->buf,
-			usbd_xfer_max_len(xfer));
-		usbd_transfer_submit(xfer);
-		break;
 	case USB_ST_TRANSFERRED:
+
+		printf("This is what I am currently looking for\n");
+		printf("======================================\n");
+
 		printf("USB_ST_TRANSFERRED athn_intr_tx_callback\n");
+		/* Not implementing fallthrough for this */
+		break;
+		printf("Fall through on athn_intr_tx_callback\n");
+	case USB_ST_SETUP:
+
+		printf("USB_ST_SETUP athn_intr_tx_callback\n");
+
+/*
+		if (data == NULL) {
+			printf("Empty pending queue?\n");
+			// DPRINTF(SC, ATHN_DEBUG_XMIT,
+			//	"%s: empty pending queue\n", __func__);
+			return;
+		}
+
+		STAILQ_REMOVE_HEAD(&usc->tx_intr_queue, next);
+
+*/
+		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->len);
+		usbd_transfer_submit(xfer);
+	//	STAILQ_FOREACH(cur_data, &sc_tx_intr_active, next) {
+
+	//	}
+
+
+
+//		usbd_xfer_set_frame_data(xfer, 0, data->buf,
+//			usbd_xfer_max_len(xfer));
+//		usbd_transfer_submit(xfer);
 		break;
 	default: /* Error */
 		printf("Error for athn_intr_tx_callback\n");
@@ -414,9 +443,7 @@ athn_usb_attach(device_t self)
 	int error;
 
 	ic->ic_name = device_get_nameunit(self);
-//	printf("%p %p %p %s\n", usc, uaa, sc, ic->ic_name);
 
-//	int error;
 	usc->sc_udev = uaa->device;
 	usc->sc_iface = uaa->iface;
 
@@ -445,6 +472,8 @@ athn_usb_attach(device_t self)
 
 	if (athn_usb_open_pipes(usc, self) != 0)
 		goto fail;
+
+//	STAILQ_INIT(&usc->tx_intr_queue);
 
 	/* Allocate xfer for firmware commands. */
 	error = athn_usb_alloc_tx_cmd(usc);
@@ -809,43 +838,16 @@ athn_usb_free_tx_list(struct athn_usb_softc *usc)
 #endif
 }
 
-static int
-athn_usb_alloc_list(struct athn_softc *sc, struct athn_data data[],
-	int ndata, int maxsz)
-{
-	int i, error;
-
-	for (i = 0; i < ndata; i++) {
-		struct athn_data *dp = &data[i];
-		dp->m = NULL;
-		dp->buf = malloc(maxsz, M_USBDEV, M_NOWAIT);
-		if (dp->buf == NULL) {
-			printf("Could not allocate buffers\n");
-//			device_printf(*sc->sc_udev,
-//				"coult not allocate buffer\n");
-			error = ENOMEM;
-			goto fail;
-		}
-		dp->ni = NULL;
-	}
-
-	return 0;
-
-fail:
-	printf("FAILURE CONDITION\n");
-	return (error);
-}
-
 int
 athn_usb_alloc_tx_cmd(struct athn_usb_softc *usc)
 {
-	struct athn_softc *sc = &usc->sc_sc;
-	int error;
+//	struct athn_softc *sc = &usc->sc_sc;
+//	int error;
 
-	error = athn_usb_alloc_list(sc, usc->usc_cmd,
-		ATHN_USB_CMD_LIST_COUNT, ATHN_USB_TXCMDSZ);
-	if (error)
-		return (error);
+//	error = athn_usb_alloc_list(sc, usc->usc_cmd,
+//		ATHN_USB_CMD_LIST_COUNT, ATHN_USB_TXCMDSZ);
+//	if (error)
+//		return (error);
 
 	// STAILQ stuff
 
@@ -1161,6 +1163,13 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
 
 	memcpy(&msg[1], buf, len);
 
+	/*
+	 * FreeBSD addition, required because OpenBSD's xfer mechanism
+	 * specifies the length during transfer, whereas FreeBSD's callback
+	 * mechanism does not.
+	 */
+	data->len = sizeof(*htc) + sizeof(*msg) + len;
+
 	ATHN_LOCK(sc);
 	printf("START usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
@@ -1238,7 +1247,10 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	// XXX Come back to this maybe?
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
 	if (error == 0 && usc->wait_msg_id != 0) {
-		error = tsleep(sc, 0, "athnhtc", hz);
+		//error = tsleep(sc, 0, "athnhtc", hz);
+		ATHN_LOCK(sc);
+		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnhtc", hz);
+		ATHN_UNLOCK(sc);
 	}
 	usc->wait_msg_id = 0;
 	if (error != 0) {
@@ -1274,12 +1286,16 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0) {
 		printf("Sleep here Line: %d\n", __LINE__);
-		error = tsleep(sc, 0, "athnhtc", hz);
+		ATHN_LOCK(sc);
+		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnhtc", hz);
+		ATHN_UNLOCK(sc);
+		/* Wait 1 second at most */
 	}
 	printf("Values  EINTR                  %d\n", EINTR);
 	printf("Values: ERESTART               %d\n", ERESTART);
 	printf("Values  EWOULDBLOCK            %d\n", EWOULDBLOCK);
 	printf("The end result of the sleep is %d\n", error);
+	printf("Line: %d\n", __LINE__);
 	usc->wait_msg_id = 0;
 //	splx(s);
 	if (error != 0) {
