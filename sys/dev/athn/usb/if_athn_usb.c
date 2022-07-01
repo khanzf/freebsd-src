@@ -283,19 +283,19 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 		.callback = athn_usb_intr,
 		.bufsize = 0x40,
 //		.callback = athn_intr_rx_callback,
-		.interval = USB_DEFAULT_INTERVAL,
+//		.interval = USB_DEFAULT_INTERVAL,
 	},
 	[ATHN_TX_INTR] = {
 		.type = UE_INTERRUPT,
 		.endpoint = 0x04, //AR_PIPE_TX_INTR,
 		.direction = UE_DIR_TX,
 		.flags = {
-			.short_xfer_ok = 1,
+//			.short_xfer_ok = 1,
 //			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
 		.callback= athn_intr_tx_callback,
-		.bufsize = 0x40,
+		.bufsize = 512, // 200, //40,
 		.timeout = ATHN_USB_CMD_TIMEOUT,
 //		.interval = 1,
 	}
@@ -306,7 +306,7 @@ void
 athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
 	int actlen;
-	struct usb_page_cache *pc;
+//	struct usb_page_cache *pc;
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	switch(USB_GET_STATE(xfer)) {
@@ -316,7 +316,8 @@ athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 		/* XXX Fall through */
 	case USB_ST_SETUP:
 //		printf("USB_ST_SETUP athn_data_rx_callback\n");
-		pc = usbd_xfer_get_frame(xfer, 0);
+		//pc = usbd_xfer_get_frame(xfer, 0);
+		usbd_xfer_get_frame(xfer, 0);
 		printf("athn_data_rx_callback USB_ST_SETUP\n");
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
 		printf("FRAME LENGTH = %d\n", usbd_xfer_max_len(xfer));
@@ -393,6 +394,8 @@ athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 */
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->len);
+		usbd_xfer_set_frames(xfer, 1);
+//		usbd_xfer_set_stall(xfer);
 		usbd_transfer_submit(xfer);
 	//	STAILQ_FOREACH(cur_data, &sc_tx_intr_active, next) {
 
@@ -406,6 +409,7 @@ athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 		break;
 	default: /* Error */
 		printf("Error for athn_intr_tx_callback\n");
+		printf("%d error\n", error);
 		break;
 	}
 
@@ -639,16 +643,16 @@ athn_usb_open_pipes(struct athn_usb_softc *usc, device_t dev)
 
 	isize = 1 * 64; // Currently hard-coding this value
 	usc->ibuflen = isize;
-	usc->ibuf = malloc(isize, M_USBDEV, M_NOWAIT);
+	usc->ibuf = malloc(isize, M_USBDEV, M_WAITOK);
 
 	printf("Start of running initial interrupts\n");
-	ATHN_LOCK(sc);
+//	ATHN_LOCK(sc);
 	// Commenting out after wireshark analysis
-	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
-	usbd_transfer_start(usc->usc_xfer[ATHN_RX_DATA]);
-	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
-	usbd_transfer_start(usc->usc_xfer[ATHN_TX_DATA]);
-	ATHN_UNLOCK(sc);
+//	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
+//	usbd_transfer_start(usc->usc_xfer[ATHN_RX_DATA]);
+//	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
+//	usbd_transfer_start(usc->usc_xfer[ATHN_TX_DATA]);
+//	ATHN_UNLOCK(sc);
 	printf("End of running initial interrupts\n");
 
 	return 0;
@@ -864,6 +868,7 @@ athn_usb_alloc_tx_cmd(struct athn_usb_softc *usc)
 		printf(": could not allocate xfer\n");
 		return (ENOMEM);
 	}
+
 	data->buf = malloc(ATHN_USB_TXCMDSZ, M_USBDEV, M_NOWAIT | M_ZERO);
 	if (data->buf == NULL) {
 		printf(": could not allocate xfer buffer\n");
@@ -1012,10 +1017,19 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	usc->wait_msg_id = AR_HTC_MSG_READY;
 	ATHN_LOCK(sc);
 	error = usbd_do_request(usc->sc_udev, &sc->sc_mtx, &req, NULL);
+//	usbd_transfer_start(RX_INTR); //////////////////////////////
+	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
+	int xxx = 10;
+	while (usbd_transfer_pending(usc->usc_xfer[ATHN_RX_INTR]) && xxx--) {
+		ATHN_UNLOCK(sc);
+		pause("W", hz / 16);
+		printf("Waiting for Rx interrupt!\n");
+		ATHN_LOCK(sc);
+	}
 	if (error == 0 && usc->wait_msg_id != 0) {
 		printf("Error is %d\n", error);
 //		error = tsleep(&usc->wait_msg_id, 0, "athnfw", hz); /* Wait 1 second at most */
-		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnfw", hz); /* Wait 1 second at most */
+		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnfw", 2 * hz); /* Wait 1 second at most */
 
 //		msleep(const void *chan, struct mtx *mtx, int priority, const char *wmesg, int timo);
 
@@ -1161,7 +1175,7 @@ int
 athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
     int len)
 {
-//	struct athn_softc *sc = &usc->sc_sc;
+	struct athn_softc *sc = &usc->sc_sc;
 	struct athn_usb_tx_data *data = &usc->tx_cmd;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_htc_msg_hdr *msg;
@@ -1198,8 +1212,14 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
 
 //	ATHN_LOCK(sc);
 	printf("START usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
-	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
 	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
+	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
+	while (usbd_transfer_pending(usc->usc_xfer[ATHN_TX_INTR])) {
+		ATHN_UNLOCK(sc);
+		pause("W", hz / 16);
+		printf("Pausing for a moment..\n");
+		ATHN_LOCK(sc);
+	}
 	printf("END   usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 //	ATHN_UNLOCK(sc);
 
@@ -2598,6 +2618,7 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 		printf("====USB_ST_SETUP       athn_usb_intr\n");
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
 		printf("FRAME LENGTH = %d\n", usbd_xfer_max_len(xfer));
+		usbd_xfer_set_frames(xfer, 1);
 		usbd_transfer_submit(xfer);
 		printf("End condition 2\n");
 		printf("End of USB_ST_SETUP\n");
