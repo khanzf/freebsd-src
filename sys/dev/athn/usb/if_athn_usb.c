@@ -394,6 +394,11 @@ athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 */
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->len);
+		for(int q = 0;q<data->len;q++) {
+			printf("%02x ", data->buf[q]);
+		}
+		printf("\n");
+		printf("data->len is %d\n", data->len);
 		usbd_xfer_set_frames(xfer, 1);
 //		usbd_xfer_set_stall(xfer);
 		usbd_transfer_submit(xfer);
@@ -562,8 +567,10 @@ athn_usb_attachhook(device_t self)
 	/* We're now ready to attach the bus agnostic driver. */
 	error = athn_attach(sc);
 	if (error != 0) {
+		printf("returning from the athn_attach...\n");
 		return (ENXIO);
 	}
+	printf("End of this thing\n");
 #if 0
 	usc->sc_athn_attached = 1;
 	/* Override some operations for USB. */
@@ -1398,6 +1405,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 //	s = splusb();
 	// REVISIT THIS CODE BELOW. WHY THE LOOP?!?!?!?
 	while (usc->wait_cmd_id) {
+		int q;
 		/*
 		 * The previous USB transfer is not done yet. We can't use
 		 * data->xfer until it is done or we'll cause major confusion
@@ -1405,7 +1413,8 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		 */
 		//tsleep(&usc->wait_cmd_id, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT);
 		ATHN_LOCK(sc);
-		msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT); /* Wait 1 second at most */
+		q = msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT); /* Wait 1 second at most */
+		printf("msleep value is %d\n", q);
 		ATHN_UNLOCK(sc);
 //		tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmx",
 //		    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
@@ -1426,6 +1435,21 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	wmi->seq_no = htobe16(usc->wmi_seq_no);
 
 	memcpy(&wmi[1], ibuf, ilen);
+
+	printf("Monitor value ilen=%d\n", ilen);
+
+	int x;
+    for(x=0;x<18;x++) {
+         printf("%02X ", data->buf[x]);
+    }
+    printf("\n");
+
+	data->len = sizeof(*htc) + sizeof(*wmi) + ilen;
+
+	printf("Lengths: %lu\n", sizeof(*htc));
+	printf("         %lu\n", sizeof(*wmi));
+	printf("         %d\n", ilen);
+	printf("Setting length to %d\n", data->len);
 
 	ATHN_LOCK(sc);
 	printf("2nd START usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
@@ -1450,9 +1474,11 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
 //	error = tsleep(&usc->wait_cmd_id, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
+	printf("Pre lock\n");
 	ATHN_LOCK(sc);
-	error = msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT); /* Wait 1 second at most */
+	error = msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmi", hz); //ATHN_USB_CMD_TIMEOUT);
 	ATHN_UNLOCK(sc);
+	printf("Post Lock\n");
 //	error = tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmi",
 //	    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
 	if (error) {
@@ -1461,6 +1487,9 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 			    cmd_id);
 			error = ETIMEDOUT;
 		}
+	}
+	else {
+		printf("It woke up???\n");
 	}
 
 	/* 
@@ -1502,7 +1531,6 @@ athn_usb_read_rom(struct athn_softc *sc)
 uint32_t
 athn_usb_read(struct athn_softc *sc, uint32_t addr)
 {
-	printf("Unimplemented athn_usb_read call, probably should implement this first\n");
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	uint32_t val;
 	int error;
@@ -1513,7 +1541,6 @@ athn_usb_read(struct athn_softc *sc, uint32_t addr)
 	addr = htobe32(addr);
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_REG_READ,
 	    &addr, sizeof(addr), &val);
-	printf("THIS DROPS AN IERROR!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 	if (error != 0)
 		return (0xdeadbeef);
 	return (htobe32(val));
@@ -2436,14 +2463,14 @@ void
 athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 {
 	printf("athn_usb_rx_wmi_ctrl called, this has the wakeup function\n");
-#if 0
 	struct ar_wmi_cmd_hdr *wmi;
 	uint16_t cmd_id;
 
 	if (__predict_false(len < sizeof(*wmi)))
 		return;
 	wmi = (struct ar_wmi_cmd_hdr *)buf;
-	cmd_id = betoh16(wmi->cmd_id);
+//	cmd_id = betoh16(wmi->cmd_id);
+	cmd_id = be16toh(wmi->cmd_id);
 
 	if (!(cmd_id & AR_WMI_EVT_FLAG)) {
 		if (usc->wait_cmd_id != cmd_id)
@@ -2463,6 +2490,7 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 		break;
 #endif
 	case AR_WMI_EVT_TXSTATUS: {
+#if 0 // Temporary commenting this out
 		struct ar_wmi_evt_txstatus_list *tsl;
 		int i;
 
@@ -2493,15 +2521,16 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 				    ts);
 		}
 		break;
+#endif // End of the temp comment out
+	printf("AR_WMI_EVT_TXSTATUS The above code is temporary removed, this should be enabled.\n");
 	}
 	case AR_WMI_EVT_FATAL:
-		printf("%s: fatal firmware error\n", usc->usb_dev.dv_xname);
+//		printf("%s: fatal firmware error\n", usc->usb_dev.dv_xname);
 		break;
 	default:
 		DPRINTF(("WMI event %d ignored\n", cmd_id));
 		break;
 	}
-#endif
 }
 
 void
