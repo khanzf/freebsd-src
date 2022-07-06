@@ -74,8 +74,10 @@ int athn_debug = 0;
 
 void		athn_radiotap_attach(struct athn_softc *);
 void		athn_get_chanlist(struct athn_softc *);
+#endif
 const char *	athn_get_mac_name(struct athn_softc *);
 const char *	athn_get_rf_name(struct athn_softc *);
+#if 0
 void		athn_led_init(struct athn_softc *);
 void		athn_set_led(struct athn_softc *, int);
 void		athn_btcoex_init(struct athn_softc *);
@@ -84,12 +86,12 @@ void		athn_btcoex_disable(struct athn_softc *);
 void		athn_set_rxfilter(struct athn_softc *, uint32_t);
 #endif
 void		athn_get_chipid(struct athn_softc *);
-#if 0
 int		athn_reset_power_on(struct athn_softc *);
 int		athn_reset(struct athn_softc *, int);
 void		athn_init_pll(struct athn_softc *,
 		    const struct ieee80211_channel *);
 int		athn_set_power_awake(struct athn_softc *);
+#if 0
 void		athn_set_power_sleep(struct athn_softc *);
 void		athn_write_serdes(struct athn_softc *,
 		    const struct athn_serdes *);
@@ -242,22 +244,25 @@ athn_attach(struct athn_softc *sc)
 	printf("-- Comes to athn_attach! ----- \n");
 	//struct ieee80211com *ic = &sc->sc_ic;
 	//struct ifnet *ifp = &ic->ic_if;
-	//int error;
+	int error;
 
 	/* Read hardware revision. */
 	athn_get_chipid(sc);
 
-	return 0;
-#if 0
 	if ((error = athn_reset_power_on(sc)) != 0) {
-		printf("%s: could not reset chip\n", sc->sc_dev.dv_xname);
+		printf(": could not reset chip\n");//, sc->sc_dev.dv_xname);
+		//printf("%s: could not reset chip\n", sc->sc_dev.dv_xname);
 		return (error);
 	}
 
 	if ((error = athn_set_power_awake(sc)) != 0) {
-		printf("%s: could not wakeup chip\n", sc->sc_dev.dv_xname);
+//		printf("%s: could not wakeup chip\n", sc->sc_dev.dv_xname);
+		printf(": could not wakeup chip\n"); //, sc->sc_dev.dv_xname);
 		return (error);
 	}
+	printf("athn_set_power_awake seems to have worked\n");
+	return 0;
+#if 0
 
 	if (AR_SREV_5416(sc) || AR_SREV_9160(sc))
 		error = ar5416_attach(sc);
@@ -603,8 +608,6 @@ athn_get_chipid(struct athn_softc *sc)
 	printf("Exiting athn_get_chipid\n");
 }
 
-#if 0
-
 const char *
 athn_get_mac_name(struct athn_softc *sc)
 {
@@ -637,7 +640,7 @@ athn_get_mac_name(struct athn_softc *sc)
 const char *
 athn_get_rf_name(struct athn_softc *sc)
 {
-	KASSERT(!AR_SINGLE_CHIP(sc));
+	KASSERT(!AR_SINGLE_CHIP(sc), ("AR_SINGLE_CHIP"));
 
 	switch (sc->rf_rev) {
 	case AR_RAD5133_SREV_MAJOR:	/* Dual-band 3T3R. */
@@ -655,6 +658,7 @@ athn_get_rf_name(struct athn_softc *sc)
 int
 athn_reset_power_on(struct athn_softc *sc)
 {
+	printf("start of athn_reset_power_on\n");
 	int ntries;
 
 	/* Set force wake. */
@@ -684,6 +688,8 @@ athn_reset_power_on(struct athn_softc *sc)
 		DPRINTF(("RTC not waking up\n"));
 		return (ETIMEDOUT);
 	}
+	printf("ntries was %d\n", ntries);
+	printf("end of athn_reset_power_on\n");
 	return (athn_reset(sc, 0));
 }
 
@@ -727,6 +733,7 @@ athn_reset(struct athn_softc *sc, int cold)
 int
 athn_set_power_awake(struct athn_softc *sc)
 {
+printf("start of athn_set_power_awake\n");
 	int ntries, error;
 
 	/* Do a Power-On-Reset if shutdown. */
@@ -756,8 +763,10 @@ athn_set_power_awake(struct athn_softc *sc)
 
 	AR_CLRBITS(sc, AR_STA_ID1, AR_STA_ID1_PWR_SAV);
 	AR_WRITE_BARRIER(sc);
+printf("end of athn_set_power_awake\n");
 	return (0);
 }
+#if 0
 
 void
 athn_set_power_sleep(struct athn_softc *sc)
@@ -775,6 +784,7 @@ athn_set_power_sleep(struct athn_softc *sc)
 		AR_CLRBITS(sc, AR_RTC_RESET, AR_RTC_RESET_EN);
 	AR_WRITE_BARRIER(sc);
 }
+#endif
 
 void
 athn_init_pll(struct athn_softc *sc, const struct ieee80211_channel *c)
@@ -823,6 +833,7 @@ athn_init_pll(struct athn_softc *sc, const struct ieee80211_channel *c)
 	AR_WRITE(sc, AR_RTC_SLEEP_CLK, AR_RTC_FORCE_DERIVED_CLK);
 	AR_WRITE_BARRIER(sc);
 }
+#if 0
 
 void
 athn_write_serdes(struct athn_softc *sc, const struct athn_serdes *serdes)
