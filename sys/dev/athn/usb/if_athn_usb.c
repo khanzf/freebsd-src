@@ -366,8 +366,6 @@ athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct athn_usb_tx_data *data = &usc->tx_cmd;
 
 //	struct athn_data *data;
-	printf("athn_intr_tx_callback heartbeat!\n");
-
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	switch(USB_GET_STATE(xfer)) {
@@ -377,11 +375,7 @@ athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 		/* Not implementing fallthrough for this */
 //	msg->msg_id = htobe16(msg_id);
 		break;
-		printf("Fall through on athn_intr_tx_callback\n");
 	case USB_ST_SETUP:
-
-		printf("USB_ST_SETUP athn_intr_tx_callback\n");
-
 /*
 		if (data == NULL) {
 			printf("Empty pending queue?\n");
@@ -394,11 +388,6 @@ athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 */
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->len);
-		for(int q = 0;q<data->len;q++) {
-			printf("%02x ", data->buf[q]);
-		}
-		printf("\n");
-		printf("data->len is %d\n", data->len);
 		usbd_xfer_set_frames(xfer, 1);
 //		usbd_xfer_set_stall(xfer);
 		usbd_transfer_submit(xfer);
@@ -413,8 +402,7 @@ athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 //		usbd_transfer_submit(xfer);
 		break;
 	default: /* Error */
-		printf("Error for athn_intr_tx_callback\n");
-		printf("%d error\n", error);
+		printf("Error for athn_intr_tx_callback: %d\n", error);
 		break;
 	}
 
@@ -1436,25 +1424,10 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 	memcpy(&wmi[1], ibuf, ilen);
 
-	printf("Monitor value ilen=%d\n", ilen);
-
-	int x;
-    for(x=0;x<18;x++) {
-         printf("%02X ", data->buf[x]);
-    }
-    printf("\n");
-
 	data->len = sizeof(*htc) + sizeof(*wmi) + ilen;
 
-	printf("Lengths: %lu\n", sizeof(*htc));
-	printf("         %lu\n", sizeof(*wmi));
-	printf("         %d\n", ilen);
-	printf("Setting length to %d\n", data->len);
-
 	ATHN_LOCK(sc);
-	printf("2nd START usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
-	printf("2nd END   usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 	ATHN_UNLOCK(sc);
 
 //	usbd_setup_xfer(data->xfer, usc->tx_intr_pipe, NULL, data->buf,
@@ -1474,11 +1447,9 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
 //	error = tsleep(&usc->wait_cmd_id, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
-	printf("Pre lock\n");
 	ATHN_LOCK(sc);
 	error = msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmi", hz); //ATHN_USB_CMD_TIMEOUT);
 	ATHN_UNLOCK(sc);
-	printf("Post Lock\n");
 //	error = tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmi",
 //	    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
 	if (error) {
@@ -1488,9 +1459,6 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 			error = ETIMEDOUT;
 		}
 	}
-	else {
-		printf("It woke up???\n");
-	}
 
 	/* 
 	 * Both the WMI command and transfer are done or have timed out.
@@ -1499,7 +1467,6 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	usc->wait_cmd_id = 0;
 	wakeup(&usc->wait_cmd_id);
 
-	printf("athn_usdb_wmi_xcmd %d\n", __LINE__);
 //	splx(s);
 	return (error);
 }
@@ -1549,7 +1516,6 @@ athn_usb_read(struct athn_softc *sc, uint32_t addr)
 void
 athn_usb_write(struct athn_softc *sc, uint32_t addr, uint32_t val)
 {
-	printf("athn_usb_write Currently unimplemented!\n");
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 
 	usc->wbuf[usc->wcount].addr = htobe32(addr);
@@ -2462,7 +2428,6 @@ athn_usb_tx_status(void *arg, struct ieee80211_node *ni)
 void
 athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 {
-	printf("athn_usb_rx_wmi_ctrl called, this has the wakeup function\n");
 	struct ar_wmi_cmd_hdr *wmi;
 	uint16_t cmd_id;
 
@@ -2526,6 +2491,7 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 	}
 	case AR_WMI_EVT_FATAL:
 //		printf("%s: fatal firmware error\n", usc->usb_dev.dv_xname);
+		printf(": fatal firmware error\n");
 		break;
 	default:
 		DPRINTF(("WMI event %d ignored\n", cmd_id));
@@ -2536,7 +2502,6 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 void
 athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 {
-	printf("====athn_usb_intr callback START\n");
 	int actlen;
 	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
 	struct ar_htc_frame_hdr *htc;
@@ -2551,18 +2516,14 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
-		printf("====USB_ST_TRANSFERRED athn_usb_intr THIS IS GOOD!!\n");
 		pc = usbd_xfer_get_frame(xfer, 0);
 		usbd_copy_out(pc, 0, usc->ibuf, actlen);
 		len = actlen;
 
 		/* Skip watchdog pattern if present. */
 		if (len >= 4 && *(uint32_t *)buf == htobe32(0x00c60000)) {
-			printf("====Skip watchdog pattern.\n");
 			buf += 4;
 			len -= 4;
-		} else {
-			printf("==== else condition\n");
 		}
 
 		htc = (struct ar_htc_frame_hdr *)buf;
@@ -2570,7 +2531,6 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 		len -= sizeof(*htc);
 
 		if (htc->endpoint_id != 0) {
-			printf("====Enters endpoint condition!!!\n");
 //			if (__predict_false(htc->endpoint_id != usc->ep_ctrl))
 //				return;
 			/* Remove trailer if present .*/
@@ -2580,53 +2540,37 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 		//			return;
 				len -= htc->control[0];
 			}
-			printf("====athn_usb_rx_wmi_ctrl would go here\n");
 			athn_usb_rx_wmi_ctrl(usc, buf, len);
 			goto TR_SETUP;
 //			return;
 		}
-		else {
-			printf("non endpoint condition\n");
-		}
 
 		// XXX put this back in
 		if (__predict_false(len < sizeof(*msg))) {
-			printf("====Predict_false exit\n");
 			goto TR_SETUP;
 		//	return;
 		}
 		msg = (struct ar_htc_msg_hdr *)buf;
 		msg_id = be16toh(msg->msg_id);
 
-		printf("====Rx HTC message %d\n", msg_id);
 		switch (msg_id) {
 		case AR_HTC_MSG_READY:
-			printf("====Comes to AR_HTC_MSG_READY\n");
 			if (usc->wait_msg_id != msg_id) {
-				printf("Hits the if condition and breaks\n");
 				break;
 			}
 			usc->wait_msg_id = 0;
 			wakeup(&usc->wait_msg_id);
-			printf("====Post wakeup!\n");
 			break;
 		case AR_HTC_MSG_CONN_SVC_RSP:
-			printf("******************** AR_HTC_MSG_CONN_SVC_RSP condition!!\n");
 			if (usc->wait_msg_id != msg_id) {
-				printf("AR_HTC_MSG_CONN_SVC_RSP condition 1\n");
-				printf("wait_msg_id = %d\n", usc->wait_msg_id);
-				printf("     msg_id = %d\n", msg_id);
 				break;
 			}
 			if (usc->msg_conn_svc_rsp != NULL) {
-				printf("AR_HTC_MSG_CONN_SVC_RSP Condition 2\n");
 				memcpy(usc->msg_conn_svc_rsp, &msg[1],
 					sizeof(struct ar_htc_msg_conn_svc_rsp));
 			}
-			printf("AR_HTC_MSG_CONN_SVC_RSP Condition 3\n");
 			usc->wait_msg_id = 0;
 			wakeup(&usc->wait_msg_id);
-			printf("After wakeup of wait_msg_id on condition 4\n");
 			break;
 		case AR_HTC_MSG_CONF_PIPE_RSP:
 			if (usc->wait_msg_id != msg_id)
@@ -2644,17 +2588,11 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 		/* XXX Fallthrough */
 	case USB_ST_SETUP:
 	TR_SETUP:
-		printf("====USB_ST_SETUP       athn_usb_intr\n");
 		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
-		printf("FRAME LENGTH = %d\n", usbd_xfer_max_len(xfer));
 		usbd_xfer_set_frames(xfer, 1);
 		usbd_transfer_submit(xfer);
-		printf("End condition 2\n");
-		printf("End of USB_ST_SETUP\n");
 		break;
 	case USB_ST_ERROR:
-		printf("====USB_ST_ERROR       athn_usb_intr\n");
-		printf("USB_ST_ERROR: %s\n", usbd_errstr(usb_error));
 		break;
 	default: /* Error */
 		printf("===default condition  athn_usb_intr\n");
@@ -2662,7 +2600,6 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 		// XXX Based on other drivers, there should be a verification for USB_ERR_CANCELLED
 	}
 
-	printf("====athn_usb_intr callback END END END\n");
 	return;
 }
 
