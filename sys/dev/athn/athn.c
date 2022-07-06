@@ -91,8 +91,8 @@ int		athn_reset(struct athn_softc *, int);
 void		athn_init_pll(struct athn_softc *,
 		    const struct ieee80211_channel *);
 int		athn_set_power_awake(struct athn_softc *);
-#if 0
 void		athn_set_power_sleep(struct athn_softc *);
+#if 0
 void		athn_write_serdes(struct athn_softc *,
 		    const struct athn_serdes *);
 void		athn_config_pcie(struct athn_softc *);
@@ -168,23 +168,26 @@ void		athn_ani_cck_err_trigger(struct athn_softc *);
 void		athn_ani_lower_immunity(struct athn_softc *);
 void		athn_ani_restart(struct athn_softc *);
 void		athn_ani_monitor(struct athn_softc *);
+#endif
 
 /* Extern functions. */
-int		ar5416_attach(struct athn_softc *);
-int		ar9280_attach(struct athn_softc *);
+//int		ar5416_attach(struct athn_softc *);
+//int		ar9280_attach(struct athn_softc *);
 int		ar9285_attach(struct athn_softc *);
-int		ar9287_attach(struct athn_softc *);
-int		ar9380_attach(struct athn_softc *);
-int		ar5416_init_calib(struct athn_softc *,
-		    struct ieee80211_channel *, struct ieee80211_channel *);
-int		ar9285_init_calib(struct athn_softc *,
-		    struct ieee80211_channel *, struct ieee80211_channel *);
-int		ar9003_init_calib(struct athn_softc *);
-void		ar9285_pa_calib(struct athn_softc *);
+//int		ar9287_attach(struct athn_softc *);
+//int		ar9380_attach(struct athn_softc *);
+//int		ar5416_init_calib(struct athn_softc *,
+//		    struct ieee80211_channel *, struct ieee80211_channel *);
+//int		ar9285_init_calib(struct athn_softc *,
+//		    struct ieee80211_channel *, struct ieee80211_channel *);
+//int		ar9003_init_calib(struct athn_softc *);
+//void		ar9285_pa_calib(struct athn_softc *);
 void		ar9271_pa_calib(struct athn_softc *);
-void		ar9287_1_3_enable_async_fifo(struct athn_softc *);
-void		ar9287_1_3_setup_async_fifo(struct athn_softc *);
-void		ar9003_reset_txsring(struct athn_softc *);
+//void		ar9287_1_3_enable_async_fifo(struct athn_softc *);
+//void		ar9287_1_3_setup_async_fifo(struct athn_softc *);
+//void		ar9003_reset_txsring(struct athn_softc *);
+
+#if 0
 
 struct cfdriver athn_cd = {
 	NULL, "athn", DV_IFNET
@@ -262,32 +265,33 @@ athn_attach(struct athn_softc *sc)
 	}
 	printf("athn_set_power_awake seems to have worked\n");
 	return 0;
-#if 0
 
-	if (AR_SREV_5416(sc) || AR_SREV_9160(sc))
-		error = ar5416_attach(sc);
-	else if (AR_SREV_9280(sc))
-		error = ar9280_attach(sc);
-	else if (AR_SREV_9285(sc))
+//	if (AR_SREV_5416(sc) || AR_SREV_9160(sc))
+//		error = ar5416_attach(sc);
+//	else if (AR_SREV_9280(sc))
+//		error = ar9280_attach(sc);
+	if (AR_SREV_9285(sc))
 		error = ar9285_attach(sc);
-#if NATHN_USB > 0
+//#if NATHN_USB > 0
 	else if (AR_SREV_9271(sc))
 		error = ar9285_attach(sc);
-#endif
-	else if (AR_SREV_9287(sc))
-		error = ar9287_attach(sc);
-	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc))
-		error = ar9380_attach(sc);
+//#endif
+//	else if (AR_SREV_9287(sc))
+//		error = ar9287_attach(sc);
+//	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc))
+//		error = ar9380_attach(sc);
 	else
 		error = ENOTSUP;
 	if (error != 0) {
-		printf("%s: could not attach chip\n", sc->sc_dev.dv_xname);
+		//printf("%s: could not attach chip\n", sc->sc_dev.dv_xname);
+		printf(": could not attach chip\n"); //, sc->sc_dev.dv_xname);
 		return (error);
 	}
 
 	/* We can put the chip in sleep state now. */
 	athn_set_power_sleep(sc);
 
+#if 0
 	if (!(sc->flags & ATHN_FLAG_USB)) {
 		error = sc->ops.dma_alloc(sc);
 		if (error != 0) {
@@ -766,7 +770,6 @@ printf("start of athn_set_power_awake\n");
 printf("end of athn_set_power_awake\n");
 	return (0);
 }
-#if 0
 
 void
 athn_set_power_sleep(struct athn_softc *sc)
@@ -784,7 +787,6 @@ athn_set_power_sleep(struct athn_softc *sc)
 		AR_CLRBITS(sc, AR_RTC_RESET, AR_RTC_RESET_EN);
 	AR_WRITE_BARRIER(sc);
 }
-#endif
 
 void
 athn_init_pll(struct athn_softc *sc, const struct ieee80211_channel *c)
