@@ -19,6 +19,8 @@
 #ifndef ATHNVAR_H
 #define ATHNVAR_H
 
+#include <net80211/ieee80211_var.h>
+#include <net80211/ieee80211_radiotap.h>
 #include <dev/athn/athnreg.h>
 
 // XXX TODO: Figure out what the enum should look like with WME_AC_BE, might not be relevant
