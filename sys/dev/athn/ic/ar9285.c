@@ -45,6 +45,7 @@
 
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
+#include <dev/athn/ic/ar9280reg.h>
 
 #if 0
 #include "athn_usb.h"
@@ -92,7 +93,7 @@
 #include <dev/ic/ar9285reg.h>
 #endif
 
-int	ar9285_attach(struct athn_softc *);
+int		ar9285_attach(struct athn_softc *);
 void	ar9285_setup(struct athn_softc *);
 void	ar9285_swap_rom(struct athn_softc *);
 const	struct ar_spur_chan *ar9285_get_spur_chans(struct athn_softc *, int);
@@ -117,7 +118,9 @@ void	ar9285_set_txpower(struct athn_softc *, struct ieee80211_channel *,
 #if 0
 uint8_t	athn_chan2fbin(struct ieee80211_channel *);
 void	athn_get_pier_ival(uint8_t, const uint8_t *, int, int *, int *);
+#endif
 int	ar5008_attach(struct athn_softc *);
+#if 0
 void	ar5008_write_txpower(struct athn_softc *, int16_t power[]);
 void	ar5008_get_pdadcs(struct athn_softc *, uint8_t, struct athn_pier *,
 	    struct athn_pier *, int, int, uint8_t, uint8_t *, uint8_t *);
@@ -135,9 +138,8 @@ void	ar9280_spur_mitigate(struct athn_softc *, struct ieee80211_channel *,
 int
 ar9285_attach(struct athn_softc *sc)
 {
-	printf("%s currently unimplemented...\n", __func__);
-	return 0;
-#if 0
+//	printf("%s currently unimplemented...\n", __func__);
+//	return 0;
 	sc->eep_base = AR9285_EEP_START_LOC;
 	sc->eep_size = sizeof(struct ar9285_eeprom);
 	sc->ngpiopins = (sc->flags & ATHN_FLAG_USB) ? 16 : 12;
@@ -169,7 +171,6 @@ ar9285_attach(struct athn_softc *sc)
 	sc->serdes = &ar9280_2_0_serdes;
 
 	return (ar5008_attach(sc));
-#endif
 }
 
 void
