@@ -154,20 +154,26 @@ ar9285_attach(struct athn_softc *sc)
 	sc->ops.get_spur_chans = ar9285_get_spur_chans;
 //#if NATHN_USB > 0
 	if (AR_SREV_9271(sc)) {
+		printf("Goes into AR_RSEV_9271 conditionn, probably should...\n");
 		sc->cca_min_2g = AR9271_PHY_CCA_MIN_GOOD_VAL_2GHZ;
 		sc->cca_max_2g = AR9271_PHY_CCA_MAX_GOOD_VAL_2GHZ;
 	} else
 //#endif
 	{
+		printf("Goes into non-ARSEV09271 condition, should not.\n");
 		sc->cca_min_2g = AR9285_PHY_CCA_MIN_GOOD_VAL_2GHZ;
 		sc->cca_max_2g = AR9285_PHY_CCA_MAX_GOOD_VAL_2GHZ;
 	}
 //#if NATHN_USB > 0
-	if (AR_SREV_9271(sc))
+	if (AR_SREV_9271(sc)) {
+		printf("Should also go into this condition\n");
 		sc->ini = &ar9271_ini;
-	else
+	}
+	else {
 //#endif
 		sc->ini = &ar9285_1_2_ini;
+		printf("Should not go into this!!\n");
+	}
 	sc->serdes = &ar9280_2_0_serdes;
 
 	return (ar5008_attach(sc));
