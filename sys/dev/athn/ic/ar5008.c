@@ -150,12 +150,11 @@ int
 ar5008_attach(struct athn_softc *sc)
 {
 	printf("%s unimplemented.\n", __func__);
-	return 0;
-#if 0
 	struct athn_ops *ops = &sc->ops;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ar_base_eep_header *base;
-	uint8_t eep_ver, kc_entries_log;
+	uint8_t eep_ver; //, kc_entries_log;
+//	uint8_t eep_ver, kc_entries_log;
 	int error;
 
 	/* Set callbacks for AR5008, AR9001 and AR9002 families. */
@@ -199,17 +198,24 @@ ar5008_attach(struct athn_softc *sc)
 	sc->obs_off = AR_OBS;
 	sc->gpio_input_en_off = AR_GPIO_INPUT_EN_VAL;
 
-	if (!(sc->flags & ATHN_FLAG_PCIE))
+	if (!(sc->flags & ATHN_FLAG_PCIE)) {
+		printf("non-pcie\n");
 		athn_config_nonpcie(sc);
-	else
+	}
+	else {
+		printf("pcie\n");
 		athn_config_pcie(sc);
+	}
 
 	/* Read entire ROM content in memory. */
+	printf("Going into ar5008_read_rom\n");
 	if ((error = ar5008_read_rom(sc)) != 0) {
 //		printf("%s: could not read ROM\n", sc->sc_dev.dv_xname);
 		printf(": could not read ROM\n"); //, sc->sc_dev.dv_xname);
 		return (error);
 	}
+	printf("Ending here\n");
+	return 0;
 
 	/* Get RF revision. */
 	sc->rf_rev = ar5416_get_rf_rev(sc);
@@ -217,6 +223,7 @@ ar5008_attach(struct athn_softc *sc)
 	base = sc->eep;
 	eep_ver = (base->version >> 12) & 0xf;
 	sc->eep_rev = (base->version & 0xfff);
+	return 0;
 	if (eep_ver != AR_EEP_VER || sc->eep_rev == 0) {
 		printf(": unsupported ROM version"); // %d.%d\n",
 //		    sc->sc_dev.dv_xname, eep_ver, sc->eep_rev);
@@ -246,6 +253,9 @@ ar5008_attach(struct athn_softc *sc)
 
 	IEEE80211_ADDR_COPY(ic->ic_macaddr, base->macAddr);
 
+	printf("gets gere");
+	return 0;
+#if 0
 	/* Check if we have a hardware radio switch. */
 	if (base->rfSilent & AR_EEP_RFSILENT_ENABLED) {
 		sc->flags |= ATHN_FLAG_RFSILENT;
