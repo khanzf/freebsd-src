@@ -8,7 +8,7 @@ SYSDIR?=${SRCTOP}/sys
 KMOD     = athn
 SRCS     = athn.c athnreg.h athnvar.h \
 	   ic/ar5008reg.h ic/ar9285.c ic/ar9285reg.h \
-	   ic/ar9280.c ic/ar5008.c ic/ar5416.c \
+	   ic/ar9280.c ic/ar5008.c ic/ar5416.c ic/ar9287.c ic/ar9380.c \
 	   bus_if.h device_if.h \
 	   opt_bus.h opt_rtwn.h opt_wlan.h
 

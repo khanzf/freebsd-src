@@ -387,11 +387,15 @@ athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 		STAILQ_REMOVE_HEAD(&usc->tx_intr_queue, next);
 
 */
+
+		printf("DATA LENGTH: %d\n", data->len);
+
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->len);
-		usbd_xfer_set_frames(xfer, 1);
+//		usbd_xfer_set_frames(xfer, 2);
 //		usbd_xfer_set_stall(xfer);
 		usbd_transfer_submit(xfer);
 	//	STAILQ_FOREACH(cur_data, &sc_tx_intr_active, next) {
+
 
 	//	}
 
@@ -533,7 +537,7 @@ athn_usb_attachhook(device_t self)
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
 //	struct athn_ops *ops = &sc->ops;
-//	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211com *ic = &sc->sc_ic;
 //	struct ifnet *ifp = &ic->ic_if;
 //	int s, i, error;
 	int error;
@@ -542,7 +546,7 @@ athn_usb_attachhook(device_t self)
 	error = athn_usb_load_firmware(usc);
 	if (error != 0) {
 		printf("Could not load firmware\n");
-//		printf("%s: could not load firmware\n", sc->sc_dev.dv_xname);
+		printf("%s: could not load firmware\n", ic->ic_name);
 		return(ENXIO);
 	}
 
@@ -1385,6 +1389,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_wmi_cmd_hdr *wmi;
+	struct ieee80211com *ic = &sc->sc_ic;
 	int error;
 
 //	if (usbd_is_dying(usc->sc_udev))
@@ -1448,14 +1453,14 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	 */
 //	error = tsleep(&usc->wait_cmd_id, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
 	ATHN_LOCK(sc);
-	error = msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmi", hz); //ATHN_USB_CMD_TIMEOUT);
+	error = msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
 	ATHN_UNLOCK(sc);
 //	error = tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmi",
 //	    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
 	if (error) {
 		if (error == EWOULDBLOCK) {
-			printf(": firmware command 0x%x timed out\n",
-			    cmd_id);
+			printf("%s: firmware command 0x%x timed out\n", ic->ic_name, cmd_id);
+			printf("usc->wait_cmd_id = 0x%x\n", usc->wait_cmd_id);
 			error = ETIMEDOUT;
 		}
 	}
@@ -1527,6 +1532,7 @@ athn_usb_write(struct athn_softc *sc, uint32_t addr, uint32_t val)
 void
 athn_usb_write_barrier(struct athn_softc *sc)
 {
+	printf("%s from %s:%d\n", __func__, __FILE__, __LINE__);
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 
 	if (usc->wcount == 0)
@@ -2345,6 +2351,7 @@ athn_usb_bcneof(struct usbd_xfer *xfer, void *priv)
 void
 athn_usb_swba(struct athn_usb_softc *usc)
 {
+	printf("this isnt dine");
 #if 0
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -2430,6 +2437,7 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 {
 	struct ar_wmi_cmd_hdr *wmi;
 	uint16_t cmd_id;
+	struct ieee80211com *ic = &usc->sc_sc.sc_ic;
 
 	if (__predict_false(len < sizeof(*wmi)))
 		return;
@@ -2438,8 +2446,10 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 	cmd_id = be16toh(wmi->cmd_id);
 
 	if (!(cmd_id & AR_WMI_EVT_FLAG)) {
-		if (usc->wait_cmd_id != cmd_id)
+		if (usc->wait_cmd_id != cmd_id) {
+			printf("errir, fiz me\n");
 			return;	/* Unexpected reply. */
+		}
 		if (usc->obuf != NULL) {
 			/* Copy answer into caller supplied buffer. */
 			memcpy(usc->obuf, &wmi[1], len - sizeof(*wmi));
@@ -2490,8 +2500,7 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 	printf("AR_WMI_EVT_TXSTATUS The above code is temporary removed, this should be enabled.\n");
 	}
 	case AR_WMI_EVT_FATAL:
-//		printf("%s: fatal firmware error\n", usc->usb_dev.dv_xname);
-		printf(": fatal firmware error\n");
+		printf("%s: fatal firmware error\n", ic->ic_name);
 		break;
 	default:
 		DPRINTF(("WMI event %d ignored\n", cmd_id));
@@ -2516,6 +2525,7 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
+		printf("======= USB_ST_TRANSFERRED\n"); 
 		pc = usbd_xfer_get_frame(xfer, 0);
 		usbd_copy_out(pc, 0, usc->ibuf, actlen);
 		len = actlen;
@@ -2540,6 +2550,7 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 		//			return;
 				len -= htc->control[0];
 			}
+			printf("big problem\n");
 			athn_usb_rx_wmi_ctrl(usc, buf, len);
 			goto TR_SETUP;
 //			return;
@@ -2555,6 +2566,7 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 
 		switch (msg_id) {
 		case AR_HTC_MSG_READY:
+			printf("======= AR_HTC_MSG_READY\n"); 
 			if (usc->wait_msg_id != msg_id) {
 				break;
 			}
@@ -2562,6 +2574,7 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 			wakeup(&usc->wait_msg_id);
 			break;
 		case AR_HTC_MSG_CONN_SVC_RSP:
+			printf("======= AR_HTC_MSG_CONN_SVC_RSP\n"); 
 			if (usc->wait_msg_id != msg_id) {
 				break;
 			}
@@ -2573,6 +2586,7 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 			wakeup(&usc->wait_msg_id);
 			break;
 		case AR_HTC_MSG_CONF_PIPE_RSP:
+			printf("======= AR_HTC_MSG_CONF_PIPE_RSP\n"); 
 			if (usc->wait_msg_id != msg_id)
 				break;
 			usc->wait_msg_id = 0;
