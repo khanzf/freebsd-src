@@ -173,21 +173,21 @@ void		athn_ani_monitor(struct athn_softc *);
 #endif
 
 /* Extern functions. */
-//int		ar5416_attach(struct athn_softc *);
-//int		ar9280_attach(struct athn_softc *);
+int		ar5416_attach(struct athn_softc *);
+int		ar9280_attach(struct athn_softc *);
 int		ar9285_attach(struct athn_softc *);
-//int		ar9287_attach(struct athn_softc *);
-//int		ar9380_attach(struct athn_softc *);
-//int		ar5416_init_calib(struct athn_softc *,
-//		    struct ieee80211_channel *, struct ieee80211_channel *);
-//int		ar9285_init_calib(struct athn_softc *,
-//		    struct ieee80211_channel *, struct ieee80211_channel *);
-//int		ar9003_init_calib(struct athn_softc *);
-//void		ar9285_pa_calib(struct athn_softc *);
+int		ar9287_attach(struct athn_softc *);
+int		ar9380_attach(struct athn_softc *);
+int		ar5416_init_calib(struct athn_softc *,
+		    struct ieee80211_channel *, struct ieee80211_channel *);
+int		ar9285_init_calib(struct athn_softc *,
+		    struct ieee80211_channel *, struct ieee80211_channel *);
+int		ar9003_init_calib(struct athn_softc *);
+void		ar9285_pa_calib(struct athn_softc *);
 void		ar9271_pa_calib(struct athn_softc *);
-//void		ar9287_1_3_enable_async_fifo(struct athn_softc *);
-//void		ar9287_1_3_setup_async_fifo(struct athn_softc *);
-//void		ar9003_reset_txsring(struct athn_softc *);
+void		ar9287_1_3_enable_async_fifo(struct athn_softc *);
+void		ar9287_1_3_setup_async_fifo(struct athn_softc *);
+void		ar9003_reset_txsring(struct athn_softc *);
 
 /* Added Definitions */
 void		 athn_config_ht(struct athn_softc *sc);
@@ -252,6 +252,7 @@ int
 athn_attach(struct athn_softc *sc)
 {
 	printf("-- Comes to athn_attach! ----- \n");
+	struct ieee80211com *ic = &sc->sc_ic;
 	//struct ieee80211com *ic = &sc->sc_ic;
 	//struct ifnet *ifp = &ic->ic_if;
 	int error;
@@ -260,40 +261,57 @@ athn_attach(struct athn_softc *sc)
 	athn_get_chipid(sc);
 
 	if ((error = athn_reset_power_on(sc)) != 0) {
-		printf(": could not reset chip\n");//, sc->sc_dev.dv_xname);
+		printf("%s: could not reset chip\n", ic->ic_name);//, sc->sc_dev.dv_xname);
 		//printf("%s: could not reset chip\n", sc->sc_dev.dv_xname);
 		return (error);
 	}
 
 	if ((error = athn_set_power_awake(sc)) != 0) {
 //		printf("%s: could not wakeup chip\n", sc->sc_dev.dv_xname);
-		printf(": could not wakeup chip\n"); //, sc->sc_dev.dv_xname);
+		printf("%s: could not wakeup chip\n", ic->ic_name); //, sc->sc_dev.dv_xname);
 		return (error);
 	}
 	printf("athn_set_power_awake seems to have worked\n");
 
-//	if (AR_SREV_5416(sc) || AR_SREV_9160(sc))
-//		error = ar5416_attach(sc);
-//	else if (AR_SREV_9280(sc))
-//		error = ar9280_attach(sc);
-	if (AR_SREV_9285(sc))
+	printf("mac_ver is 0%02x\n", sc->mac_rev);
+
+	if (AR_SREV_5416(sc) || AR_SREV_9160(sc)) {
+		printf("Condition 1\n");
+		error = ar5416_attach(sc);
+	}
+	else if (AR_SREV_9280(sc)) {
+		printf("Condition 2\n");
+		error = ar9280_attach(sc);
+	}
+	else if (AR_SREV_9285(sc)) {
+		printf("Condition 3\n");
 		error = ar9285_attach(sc);
+	}
 //#if NATHN_USB > 0
-	else if (AR_SREV_9271(sc))
+	else if (AR_SREV_9271(sc)) {
+		printf("Condition 4\n");
 		error = ar9285_attach(sc);
+	}
 //#endif
-//	else if (AR_SREV_9287(sc))
-//		error = ar9287_attach(sc);
-//	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc))
-//		error = ar9380_attach(sc);
-	else
+	else if (AR_SREV_9287(sc)) {
+		printf("Condition 5\n");
+		error = ar9287_attach(sc);
+	}
+	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc)) {
+		printf("Condition 6\n");
+		error = ar9380_attach(sc);
+	}
+	else {
+		printf("Condition 7\n");
 		error = ENOTSUP;
+	}
 	if (error != 0) {
 		//printf("%s: could not attach chip\n", sc->sc_dev.dv_xname);
-		printf(": could not attach chip\n"); //, sc->sc_dev.dv_xname);
+		printf("%s: could not attach chip\n", ic->ic_name); //, sc->sc_dev.dv_xname);
 		return (error);
 	}
 
+	return 0;
 	/* We can put the chip in sleep state now. */
 	athn_set_power_sleep(sc);
 	return 0;
@@ -863,16 +881,23 @@ athn_write_serdes(struct athn_softc *sc, const struct athn_serdes *serdes)
 	int i;
 
 	/* Write sequence to Serializer/Deserializer. */
-	for (i = 0; i < serdes->nvals; i++)
+	for (i = 0; i < serdes->nvals; i++) {
+		printf("Writing to 0x%0x 0x%0x\n", serdes->regs[i], serdes->vals[i]);
 		AR_WRITE(sc, serdes->regs[i], serdes->vals[i]);
+		DELAY(20);
+	}
 	AR_WRITE_BARRIER(sc);
+	printf("arn_write_serdes in athn.c\n");
 }
 
 void
 athn_config_pcie(struct athn_softc *sc)
 {
+	printf("%s not completed\n", __func__);
 	/* Disable PLL when in L0s as well as receiver clock when in L1. */
 	athn_write_serdes(sc, sc->serdes);
+	printf("EXIT CONDITION HERE, STOPPING!!!\n");
+	return;
 
 	DELAY(1000);
 	/* Allow forcing of PCIe core into L1 state. */
@@ -880,8 +905,10 @@ athn_config_pcie(struct athn_softc *sc)
 
 #ifndef ATHN_PCIE_WAEN
 	AR_WRITE(sc, AR_WA, sc->workaround);
+	printf("Pre Processor 1\n");
 #else
 	AR_WRITE(sc, AR_WA, ATHN_PCIE_WAEN);
+	printf("Pre Processor 2\n");
 #endif
 	AR_WRITE_BARRIER(sc);
 }
@@ -924,6 +951,7 @@ static const struct athn_serdes ar_nonpcie_serdes = {
 void
 athn_config_nonpcie(struct athn_softc *sc)
 {
+	printf("Going into athn_config_nonpcie\n");
 	athn_write_serdes(sc, &ar_nonpcie_serdes);
 }
 
