@@ -182,22 +182,21 @@ ar9285_attach(struct athn_softc *sc)
 void
 ar9285_setup(struct athn_softc *sc)
 {
-		printf("Unimplemented: %s\n", __func__);
-#if 0
+printf("Entering: %s\n", __func__);
 	const struct ar9285_eeprom *eep = sc->eep;
 	uint8_t type;
 
 	/* Select initialization values based on ROM. */
 	type = eep->baseEepHeader.txGainType;
-	DPRINTF(("Tx gain type=0x%x\n", type));
-#if NATHN_USB > 0
+//	DPRINTF(("Tx gain type=0x%x\n", type));
+//#if NATHN_USB > 0
 	if (AR_SREV_9271(sc)) {
 		if (type == AR_EEP_TXGAIN_HIGH_POWER)
 			sc->tx_gain = &ar9271_tx_gain_high_power;
 		else
 			sc->tx_gain = &ar9271_tx_gain;
 	} else
-#endif	/* NATHN_USB */
+//#endif	/* NATHN_USB */
 	if ((AR_READ(sc, AR_AN_SYNTH9) & 0x7) == 0x1) {	/* XE rev. */
 		if (type == AR_EEP_TXGAIN_HIGH_POWER)
 			sc->tx_gain = &ar9285_2_0_tx_gain_high_power;
@@ -209,7 +208,7 @@ ar9285_setup(struct athn_softc *sc)
 		else
 			sc->tx_gain = &ar9285_1_2_tx_gain;
 	}
-#endif
+printf("Exiting: %s\n", __func__);
 }
 
 void
