@@ -252,8 +252,6 @@ int
 athn_attach(struct athn_softc *sc)
 {
 	printf("-- Comes to athn_attach! ----- \n");
-	struct ieee80211com *ic = &sc->sc_ic;
-	//struct ieee80211com *ic = &sc->sc_ic;
 	//struct ifnet *ifp = &ic->ic_if;
 	int error;
 
@@ -261,18 +259,14 @@ athn_attach(struct athn_softc *sc)
 	athn_get_chipid(sc);
 
 	if ((error = athn_reset_power_on(sc)) != 0) {
-		printf("%s: could not reset chip\n", ic->ic_name);//, sc->sc_dev.dv_xname);
-		//printf("%s: could not reset chip\n", sc->sc_dev.dv_xname);
+		device_printf(sc->sc_dev, "could not reset chip\n");
 		return (error);
 	}
 
 	if ((error = athn_set_power_awake(sc)) != 0) {
-//		printf("%s: could not wakeup chip\n", sc->sc_dev.dv_xname);
-		printf("%s: could not wakeup chip\n", ic->ic_name); //, sc->sc_dev.dv_xname);
+		device_printf(sc->sc_dev, "could not wakeup chip\n");
 		return (error);
 	}
-	printf("athn_set_power_awake seems to have worked\n");
-
 	printf("mac_ver is 0%02x\n", sc->mac_rev);
 
 	if (AR_SREV_5416(sc) || AR_SREV_9160(sc)) {
@@ -306,8 +300,7 @@ athn_attach(struct athn_softc *sc)
 		error = ENOTSUP;
 	}
 	if (error != 0) {
-		//printf("%s: could not attach chip\n", sc->sc_dev.dv_xname);
-		printf("%s: could not attach chip\n", ic->ic_name); //, sc->sc_dev.dv_xname);
+		device_printf(sc->sc_dev, "could not attach chip\n");
 		return (error);
 	}
 
@@ -1208,11 +1201,13 @@ athn_delete_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 void
 athn_led_init(struct athn_softc *sc)
 {
+	printf("athn_led_init\n");
 	struct athn_ops *ops = &sc->ops;
 
 	ops->gpio_config_output(sc, sc->led_pin, AR_GPIO_OUTPUT_MUX_AS_OUTPUT);
 	/* LED off, active low. */
 	athn_set_led(sc, 0);
+	athn_set_led(sc, 1); // Delete this, temporary addition
 }
 
 void

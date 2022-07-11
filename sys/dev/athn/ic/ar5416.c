@@ -754,7 +754,6 @@ ar5416_get_rf_rev(struct athn_softc *sc)
 	rev = ar5416_reverse_bits(reg, 8);
 	if ((rev & AR_RADIO_SREV_MAJOR) == 0)
 		rev = AR_RAD5133_SREV_MAJOR;
-	printf("Return of %s\n", __func__);
 	return (rev);
 }
 
