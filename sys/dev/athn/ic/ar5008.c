@@ -35,8 +35,9 @@
 //#include <sys/device.h>
 #include <sys/stdint.h>	/* uintptr_t */
 #include <sys/endian.h>
+#include <sys/bus.h>
 
-#include <machine/bus.h>
+//#include <machine/bus.h>
 
 //#if NBPFILTER > 0
 //#include <net/bpf.h>
@@ -208,7 +209,7 @@ ar5008_attach(struct athn_softc *sc)
 	/* Read entire ROM content in memory. */
 	printf("Going into ar5008_read_rom\n");
 	if ((error = ar5008_read_rom(sc)) != 0) {
-		printf("%s: could not read ROM\n", ic->ic_name);
+		device_printf(sc->sc_dev, "could not read ROM\n");
 		return (error);
 	}
 
@@ -219,8 +220,8 @@ ar5008_attach(struct athn_softc *sc)
 	eep_ver = (base->version >> 12) & 0xf;
 	sc->eep_rev = (base->version & 0xfff);
 	if (eep_ver != AR_EEP_VER || sc->eep_rev == 0) {
-		printf("%s: unsupported ROM version %d.%d\n",
-		    ic->ic_name, eep_ver, sc->eep_rev);
+		device_printf(sc->sc_dev, "unsupported ROM version %d.%d\n",
+		    eep_ver, sc->eep_rev);
 		return (EINVAL);
 	}
 
@@ -304,7 +305,6 @@ ar5008_read_eep_word(struct athn_softc *sc, uint32_t addr, uint16_t *val)
 int
 ar5008_read_rom(struct athn_softc *sc)
 {
-	printf("%s unimplemented\n", __func__);
 	uint32_t addr, end;
 	uint16_t magic, sum, *eep;
 	int need_swap = 0;
@@ -343,18 +343,13 @@ ar5008_read_rom(struct athn_softc *sc)
 		sum ^= *eep;
 	}
 	if (sum != 0xffff) {
-		printf(": bad ROM checksum 0x%04x\n", sum);
-//		printf("%s: bad ROM checksum 0x%04x\n",
-//		    sc->sc_dev.dv_xname, sum);
+		device_printf(sc->sc_dev, "bad ROM checksum 0x%04x\n", sum);
 		return (EIO);
 	}
 	if (need_swap)
 		ar5008_swap_rom(sc);
 
 	return (0);
-	return 0;
-#if 0
-#endif
 }
 
 void

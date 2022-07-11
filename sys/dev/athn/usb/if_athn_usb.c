@@ -535,7 +535,7 @@ athn_usb_attachhook(device_t self)
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
 //	struct athn_ops *ops = &sc->ops;
-	struct ieee80211com *ic = &sc->sc_ic;
+//	struct ieee80211com *ic = &sc->sc_ic;
 //	struct ifnet *ifp = &ic->ic_if;
 //	int s, i, error;
 	int error;
@@ -543,8 +543,7 @@ athn_usb_attachhook(device_t self)
 	/* Load firmware. */
 	error = athn_usb_load_firmware(usc);
 	if (error != 0) {
-		printf("Could not load firmware\n");
-		printf("%s: could not load firmware\n", ic->ic_name);
+		device_printf(sc->sc_dev, "could not load firmware\n");
 		return(ENXIO);
 	}
 
@@ -560,7 +559,7 @@ athn_usb_attachhook(device_t self)
 		printf("returning from the athn_attach...\n");
 		return (ENXIO);
 	}
-	printf("End of this thing\n");
+	printf("=============================================== DONT FORGET TO DO THIS\n");
 #if 0
 	usc->sc_athn_attached = 1;
 	/* Override some operations for USB. */
@@ -600,9 +599,10 @@ athn_usb_attachhook(device_t self)
 	if (sc->flags & ATHN_FLAG_BTCOEX)
 		athn_btcoex_init(sc);
 #endif
+
+#endif // End of the FreeBSD stuff
 	/* Configure LED. */
 	athn_led_init(sc);
-#endif
 	return 0;
 }
 
@@ -1374,7 +1374,6 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_wmi_cmd_hdr *wmi;
-	struct ieee80211com *ic = &sc->sc_ic;
 	int error;
 
 //	if (usbd_is_dying(usc->sc_udev))
@@ -1444,8 +1443,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 //	    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
 	if (error) {
 		if (error == EWOULDBLOCK) {
-			printf("%s: firmware command 0x%x timed out\n", ic->ic_name, cmd_id);
-			printf("usc->wait_cmd_id = 0x%x\n", usc->wait_cmd_id);
+			device_printf(sc->sc_dev, "firmware command 0x%x timed out\n", cmd_id);
 			error = ETIMEDOUT;
 		}
 	}
@@ -2453,7 +2451,6 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 {
 	struct ar_wmi_cmd_hdr *wmi;
 	uint16_t cmd_id;
-	struct ieee80211com *ic = &usc->sc_sc.sc_ic;
 
 	if (__predict_false(len < sizeof(*wmi)))
 		return;
@@ -2516,7 +2513,7 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 	printf("AR_WMI_EVT_TXSTATUS The above code is temporary removed, this should be enabled.\n");
 	}
 	case AR_WMI_EVT_FATAL:
-		printf("%s: fatal firmware error\n", ic->ic_name);
+		device_printf(usc->sc_sc.sc_dev, "fatal firmware error\n");
 		break;
 	default:
 		DPRINTF(("WMI event %d ignored\n", cmd_id));
