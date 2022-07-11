@@ -311,29 +311,33 @@ athn_attach(struct athn_softc *sc)
 		return (error);
 	}
 
-	return 0;
 	/* We can put the chip in sleep state now. */
 	athn_set_power_sleep(sc);
-	return 0;
 
-#if 0
 	if (!(sc->flags & ATHN_FLAG_USB)) {
+		printf("cobfused condition\n");
+#if 0
 		error = sc->ops.dma_alloc(sc);
 		if (error != 0) {
 			printf("%s: could not allocate DMA resources\n",
-			    sc->sc_dev.dv_xname);
+			    ic->ic_name);
 			return (error);
 		}
 		/* Steal one Tx buffer for beacons. */
 		sc->bcnbuf = SIMPLEQ_FIRST(&sc->txbufs);
 		SIMPLEQ_REMOVE_HEAD(&sc->txbufs, bf_list);
+#endif
 	}
 
 	if (sc->flags & ATHN_FLAG_RFSILENT) {
-		DPRINTF(("found RF switch connected to GPIO pin %d\n",
-		    sc->rfsilent_pin));
+//		DPRINTF(("found RF switch connected to GPIO pin %d\n",
+		printf("found RF switch connected to GPIO pin %d\n",
+		    sc->rfsilent_pin);
 	}
-	DPRINTF(("%d key cache entries\n", sc->kc_entries));
+	printf("%d key cache entries\n", sc->kc_entries);
+	return 0;
+#if 0
+	//DPRINTF(("%d key cache entries\n", sc->kc_entries));
 	/*
 	 * In HostAP mode, the number of STAs that we can handle is
 	 * limited by the number of entries in the HW key cache.
@@ -344,11 +348,11 @@ athn_attach(struct athn_softc *sc)
 	if (ic->ic_max_nnodes > IEEE80211_CACHE_SIZE)
 		ic->ic_max_nnodes = IEEE80211_CACHE_SIZE;
 
-	DPRINTF(("using %s loop power control\n",
-	    (sc->flags & ATHN_FLAG_OLPC) ? "open" : "closed"));
+//	DPRINTF(("using %s loop power control\n",
+//	    (sc->flags & ATHN_FLAG_OLPC) ? "open" : "closed"));
 
-	DPRINTF(("txchainmask=0x%x rxchainmask=0x%x\n",
-	    sc->txchainmask, sc->rxchainmask));
+//	DPRINTF(("txchainmask=0x%x rxchainmask=0x%x\n",
+//	    sc->txchainmask, sc->rxchainmask));
 	/* Count the number of bits set (in lowest 3 bits). */
 	sc->ntxchains =
 	    ((sc->txchainmask >> 2) & 1) +
@@ -359,6 +363,7 @@ athn_attach(struct athn_softc *sc)
 	    ((sc->rxchainmask >> 1) & 1) +
 	    ((sc->rxchainmask >> 0) & 1);
 
+	return 0;
 	if (AR_SINGLE_CHIP(sc)) {
 		printf("%s: %s rev %d (%dT%dR), ROM rev %d, address %s\n",
 		    sc->sc_dev.dv_xname, athn_get_mac_name(sc), sc->mac_rev,
@@ -881,13 +886,9 @@ athn_write_serdes(struct athn_softc *sc, const struct athn_serdes *serdes)
 	int i;
 
 	/* Write sequence to Serializer/Deserializer. */
-	for (i = 0; i < serdes->nvals; i++) {
-		printf("Writing to 0x%0x 0x%0x\n", serdes->regs[i], serdes->vals[i]);
+	for (i = 0; i < serdes->nvals; i++)
 		AR_WRITE(sc, serdes->regs[i], serdes->vals[i]);
-		DELAY(20);
-	}
 	AR_WRITE_BARRIER(sc);
-	printf("arn_write_serdes in athn.c\n");
 }
 
 void
@@ -896,8 +897,6 @@ athn_config_pcie(struct athn_softc *sc)
 	printf("%s not completed\n", __func__);
 	/* Disable PLL when in L0s as well as receiver clock when in L1. */
 	athn_write_serdes(sc, sc->serdes);
-	printf("EXIT CONDITION HERE, STOPPING!!!\n");
-	return;
 
 	DELAY(1000);
 	/* Allow forcing of PCIe core into L1 state. */

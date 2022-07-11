@@ -388,8 +388,6 @@ athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 */
 
-		printf("DATA LENGTH: %d\n", data->len);
-
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->len);
 //		usbd_xfer_set_frames(xfer, 2);
 //		usbd_xfer_set_stall(xfer);
@@ -1178,7 +1176,6 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
 	struct athn_usb_tx_data *data = &usc->tx_cmd;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_htc_msg_hdr *msg;
-	int x;
 
 	htc = (struct ar_htc_frame_hdr *)data->buf;
 	memset(htc, 0, sizeof(*htc));
@@ -1197,25 +1194,13 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
 	 */
 	data->len = sizeof(*htc) + sizeof(*msg) + len;
 
-	printf("The length is %d\n", data->len);
-
-
-	         printf("athn_usb_htc_msg for msg_id=%d len=%d is %lu\n", msg_id, len, sizeof(*htc) + sizeof(*msg) + len);
-
-         for(x=0;x<18;x++) {
-                 printf("%02X ", data->buf[x]);
-         }
-         printf("\n");
-
-
-
 //	ATHN_LOCK(sc);
 	printf("START usbd_transfer_start athn_usb_htc_msg %d\n", __LINE__);
 	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
 	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
 	while (usbd_transfer_pending(usc->usc_xfer[ATHN_TX_INTR])) {
 		ATHN_UNLOCK(sc);
-		pause("W", hz / 16);
+		pause("Farhan was here", hz / 16);
 		printf("Pausing for a moment..\n");
 		ATHN_LOCK(sc);
 	}
@@ -1532,7 +1517,6 @@ athn_usb_write(struct athn_softc *sc, uint32_t addr, uint32_t val)
 void
 athn_usb_write_barrier(struct athn_softc *sc)
 {
-	printf("%s from %s:%d\n", __func__, __FILE__, __LINE__);
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 
 	if (usc->wcount == 0)
@@ -1546,6 +1530,7 @@ athn_usb_write_barrier(struct athn_softc *sc)
 int
 athn_usb_media_change(struct ifnet *ifp)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)ifp->if_softc;
@@ -1570,6 +1555,7 @@ athn_usb_media_change(struct ifnet *ifp)
 void
 athn_usb_next_scan(void *arg)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_softc *usc = arg;
 	struct athn_softc *sc = &usc->sc_sc;
@@ -1594,6 +1580,7 @@ int
 athn_usb_newstate(struct ieee80211com *ic, enum ieee80211_state nstate,
     int arg)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_usb_softc *usc = ic->ic_softc;
@@ -1610,6 +1597,7 @@ athn_usb_newstate(struct ieee80211com *ic, enum ieee80211_state nstate,
 void
 athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_cmd_newstate *cmd = arg;
 	struct athn_softc *sc = &usc->sc_sc;
@@ -1704,6 +1692,7 @@ void
 athn_usb_newassoc(struct ieee80211com *ic, struct ieee80211_node *ni,
     int isnew)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 #ifndef IEEE80211_STA_ONLY
 	struct athn_usb_softc *usc = ic->ic_softc;
@@ -1723,6 +1712,7 @@ athn_usb_newassoc(struct ieee80211com *ic, struct ieee80211_node *ni,
 void
 athn_usb_newassoc_cb(struct athn_usb_softc *usc, void *arg)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct ieee80211com *ic = &usc->sc_sc.sc_ic;
 	struct ieee80211_node *ni = *(void **)arg;
@@ -1745,6 +1735,7 @@ athn_usb_newassoc_cb(struct athn_usb_softc *usc, void *arg)
 struct ieee80211_node *
 athn_usb_node_alloc(struct ieee80211com *ic)
 {
+	printf("%s unimplemented.\n", __func__);
 	return NULL;
 #if 0
 	struct athn_node *an;
@@ -1759,6 +1750,7 @@ athn_usb_node_alloc(struct ieee80211com *ic)
 void
 athn_usb_count_active_sta(void *arg, struct ieee80211_node *ni)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	int *nsta = arg;
 	struct athn_node *an = (struct athn_node *)ni;
@@ -1781,6 +1773,7 @@ struct athn_usb_newauth_cb_arg {
 void
 athn_usb_newauth_cb(struct athn_usb_softc *usc, void *arg)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct ieee80211com *ic = &usc->sc_sc.sc_ic;
 	struct athn_usb_newauth_cb_arg *a = arg;
@@ -1812,6 +1805,7 @@ int
 athn_usb_newauth(struct ieee80211com *ic, struct ieee80211_node *ni,
     int isnew, uint16_t seq)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 #ifndef IEEE80211_STA_ONLY
@@ -1856,6 +1850,7 @@ athn_usb_newauth(struct ieee80211com *ic, struct ieee80211_node *ni,
 void
 athn_usb_node_free(struct ieee80211com *ic, struct ieee80211_node *ni)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_softc *usc = ic->ic_softc;
 	struct athn_node *an = (struct athn_node *)ni;
@@ -1874,6 +1869,7 @@ athn_usb_node_free(struct ieee80211com *ic, struct ieee80211_node *ni)
 void
 athn_usb_node_free_cb(struct athn_usb_softc *usc, void *arg)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct ieee80211com *ic = &usc->sc_sc.sc_ic;
 	struct ifnet *ifp = &ic->ic_if;
@@ -1899,6 +1895,7 @@ int
 athn_usb_ampdu_tx_start(struct ieee80211com *ic, struct ieee80211_node *ni,
     uint8_t tid)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_usb_softc *usc = ic->ic_softc;
@@ -1916,6 +1913,7 @@ athn_usb_ampdu_tx_start(struct ieee80211com *ic, struct ieee80211_node *ni,
 void
 athn_usb_ampdu_tx_start_cb(struct athn_usb_softc *usc, void *arg)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_aggr_cmd *cmd = arg;
 	struct ar_htc_target_aggr aggr;
@@ -1933,6 +1931,7 @@ void
 athn_usb_ampdu_tx_stop(struct ieee80211com *ic, struct ieee80211_node *ni,
     uint8_t tid)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_softc *usc = ic->ic_softc;
 	struct athn_node *an = (struct athn_node *)ni;
@@ -1948,6 +1947,7 @@ athn_usb_ampdu_tx_stop(struct ieee80211com *ic, struct ieee80211_node *ni,
 void
 athn_usb_ampdu_tx_stop_cb(struct athn_usb_softc *usc, void *arg)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_aggr_cmd *cmd = arg;
 	struct ar_htc_target_aggr aggr;
@@ -1966,6 +1966,7 @@ athn_usb_ampdu_tx_stop_cb(struct athn_usb_softc *usc, void *arg)
 void
 athn_usb_clean_nodes(void *arg, struct ieee80211_node *ni)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_softc *usc = arg;
 	struct ieee80211com *ic = &usc->sc_sc.sc_ic;
@@ -1994,13 +1995,14 @@ athn_usb_clean_nodes(void *arg, struct ieee80211_node *ni)
 		    IEEE80211_REASON_AUTH_EXPIRE);
 		ieee80211_node_leave(ic, ni);
 	}
-#endif
+#endif // End of the FreeBSD endif
 }
 #endif
 
 int
 athn_usb_create_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_node *an = (struct athn_node *)ni;
@@ -2049,6 +2051,7 @@ athn_usb_create_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 int
 athn_usb_node_set_rates(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_node *an = (struct athn_node *)ni;
@@ -2094,6 +2097,7 @@ athn_usb_node_set_rates(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 int
 athn_usb_remove_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_node *an = (struct athn_node *)ni;
@@ -2128,6 +2132,7 @@ athn_usb_remove_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 void
 athn_usb_rx_enable(struct athn_softc *sc)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	AR_WRITE(sc, AR_CR, AR_CR_RXE);
 	AR_WRITE_BARRIER(sc);
@@ -2138,6 +2143,7 @@ int
 athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
@@ -2204,6 +2210,7 @@ athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 void
 athn_usb_updateedca(struct ieee80211com *ic)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_softc *usc = ic->ic_softc;
 
@@ -2215,6 +2222,7 @@ athn_usb_updateedca(struct ieee80211com *ic)
 void
 athn_usb_updateedca_cb(struct athn_usb_softc *usc, void *arg)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	int s;
 
@@ -2227,6 +2235,7 @@ athn_usb_updateedca_cb(struct athn_usb_softc *usc, void *arg)
 void
 athn_usb_updateslot(struct ieee80211com *ic)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_softc *usc = ic->ic_softc;
 
@@ -2239,6 +2248,7 @@ athn_usb_updateslot(struct ieee80211com *ic)
 void
 athn_usb_updateslot_cb(struct athn_usb_softc *usc, void *arg)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	int s;
 
@@ -2252,6 +2262,7 @@ int
 athn_usb_set_key(struct ieee80211com *ic, struct ieee80211_node *ni,
     struct ieee80211_key *k)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_usb_softc *usc = ic->ic_softc;
@@ -2274,6 +2285,7 @@ athn_usb_set_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 void
 athn_usb_set_key_cb(struct athn_usb_softc *usc, void *arg)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct ieee80211com *ic = &usc->sc_sc.sc_ic;
 	struct athn_usb_cmd_key *cmd = arg;
@@ -2300,6 +2312,7 @@ void
 athn_usb_delete_key(struct ieee80211com *ic, struct ieee80211_node *ni,
     struct ieee80211_key *k)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_softc *usc = ic->ic_softc;
 	struct athn_usb_cmd_key cmd;
@@ -2318,6 +2331,7 @@ athn_usb_delete_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 void
 athn_usb_delete_key_cb(struct athn_usb_softc *usc, void *arg)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct ieee80211com *ic = &usc->sc_sc.sc_ic;
 	struct athn_usb_cmd_key *cmd = arg;
@@ -2335,6 +2349,7 @@ athn_usb_delete_key_cb(struct athn_usb_softc *usc, void *arg)
 void
 athn_usb_bcneof(struct usbd_xfer *xfer, void *priv)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_tx_data *data = priv;
 	struct athn_usb_softc *usc = data->sc;
@@ -2351,7 +2366,7 @@ athn_usb_bcneof(struct usbd_xfer *xfer, void *priv)
 void
 athn_usb_swba(struct athn_usb_softc *usc)
 {
-	printf("this isnt dine");
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -2416,6 +2431,7 @@ athn_usb_swba(struct athn_usb_softc *usc)
 void
 athn_usb_tx_status(void *arg, struct ieee80211_node *ni)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct ar_wmi_evt_txstatus *ts = arg;
 	struct athn_node *an = (struct athn_node *)ni;
@@ -2525,7 +2541,7 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
-		printf("======= USB_ST_TRANSFERRED\n"); 
+//		printf("======= USB_ST_TRANSFERRED\n"); 
 		pc = usbd_xfer_get_frame(xfer, 0);
 		usbd_copy_out(pc, 0, usc->ibuf, actlen);
 		len = actlen;
@@ -2550,7 +2566,6 @@ athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
 		//			return;
 				len -= htc->control[0];
 			}
-			printf("big problem\n");
 			athn_usb_rx_wmi_ctrl(usc, buf, len);
 			goto TR_SETUP;
 //			return;
@@ -2621,6 +2636,7 @@ void
 athn_usb_rx_radiotap(struct athn_softc *sc, struct mbuf *m,
     struct ar_rx_status *rs)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 
 #define IEEE80211_RADIOTAP_F_SHORTGI	0x80	/* XXX from FBSD */
@@ -2679,6 +2695,7 @@ athn_usb_rx_radiotap(struct athn_softc *sc, struct mbuf *m,
 void
 athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -2780,6 +2797,7 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m)
 void
 athn_usb_rxeof(struct usbd_xfer *xfer, void *priv)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
 	struct athn_usb_rx_data *data = priv;
@@ -2897,6 +2915,7 @@ athn_usb_rxeof(struct usbd_xfer *xfer, void *priv)
 void
 athn_usb_txeof(struct usbd_xfer *xfer, void *priv)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_usb_tx_data *data = priv;
 	struct athn_usb_softc *usc = data->sc;
@@ -2931,6 +2950,7 @@ athn_usb_txeof(struct usbd_xfer *xfer, void *priv)
 int
 athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
@@ -3071,6 +3091,7 @@ athn_usb_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 void
 athn_usb_start(struct ifnet *ifp)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_softc *sc = ifp->if_softc;
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
@@ -3125,6 +3146,7 @@ athn_usb_start(struct ifnet *ifp)
 void
 athn_usb_watchdog(struct ifnet *ifp)
 {
+	printf("%s unimplemented.\n", __func__);
 #if 0
 	struct athn_softc *sc = ifp->if_softc;
 
@@ -3146,6 +3168,7 @@ athn_usb_watchdog(struct ifnet *ifp)
 int
 athn_usb_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_softc *sc = ifp->if_softc;
@@ -3208,6 +3231,7 @@ athn_usb_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 int
 athn_usb_init(struct ifnet *ifp)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_softc *sc = ifp->if_softc;
@@ -3365,6 +3389,7 @@ athn_usb_init(struct ifnet *ifp)
 static int
 athn_usb_stop(device_t self)
 {
+	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
 	struct athn_softc *sc = ifp->if_softc;
