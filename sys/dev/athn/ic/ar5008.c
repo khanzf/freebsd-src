@@ -149,12 +149,10 @@ void	ar9280_reset_tx_gain(struct athn_softc *, struct ieee80211_channel *);
 int
 ar5008_attach(struct athn_softc *sc)
 {
-	printf("%s unimplemented.\n", __func__);
 	struct athn_ops *ops = &sc->ops;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ar_base_eep_header *base;
-	uint8_t eep_ver; //, kc_entries_log;
-//	uint8_t eep_ver, kc_entries_log;
+	uint8_t eep_ver, kc_entries_log;
 	int error;
 
 	/* Set callbacks for AR5008, AR9001 and AR9002 families. */
@@ -210,12 +208,9 @@ ar5008_attach(struct athn_softc *sc)
 	/* Read entire ROM content in memory. */
 	printf("Going into ar5008_read_rom\n");
 	if ((error = ar5008_read_rom(sc)) != 0) {
-//		printf("%s: could not read ROM\n", sc->sc_dev.dv_xname);
-		printf(": could not read ROM\n"); //, sc->sc_dev.dv_xname);
+		printf("%s: could not read ROM\n", ic->ic_name);
 		return (error);
 	}
-	printf("Ending here\n");
-	return 0;
 
 	/* Get RF revision. */
 	sc->rf_rev = ar5416_get_rf_rev(sc);
@@ -223,12 +218,9 @@ ar5008_attach(struct athn_softc *sc)
 	base = sc->eep;
 	eep_ver = (base->version >> 12) & 0xf;
 	sc->eep_rev = (base->version & 0xfff);
-	return 0;
 	if (eep_ver != AR_EEP_VER || sc->eep_rev == 0) {
-		printf(": unsupported ROM version"); // %d.%d\n",
-//		    sc->sc_dev.dv_xname, eep_ver, sc->eep_rev);
-//		printf("%s: unsupported ROM version %d.%d\n",
-//		    sc->sc_dev.dv_xname, eep_ver, sc->eep_rev);
+		printf("%s: unsupported ROM version %d.%d\n",
+		    ic->ic_name, eep_ver, sc->eep_rev);
 		return (EINVAL);
 	}
 
@@ -252,10 +244,10 @@ ar5008_attach(struct athn_softc *sc)
 	}
 
 	IEEE80211_ADDR_COPY(ic->ic_macaddr, base->macAddr);
+	for(int w=0;w<8;w++)
+		printf("%02x ", ic->ic_macaddr[w]);
+	printf("\n");
 
-	printf("gets gere");
-	return 0;
-#if 0
 	/* Check if we have a hardware radio switch. */
 	if (base->rfSilent & AR_EEP_RFSILENT_ENABLED) {
 		sc->flags |= ATHN_FLAG_RFSILENT;
@@ -284,7 +276,6 @@ ar5008_attach(struct athn_softc *sc)
 
 	ops->setup(sc);
 	return (0);
-#endif
 }
 
 /*
@@ -314,8 +305,6 @@ int
 ar5008_read_rom(struct athn_softc *sc)
 {
 	printf("%s unimplemented\n", __func__);
-	return 0;
-#if 0
 	uint32_t addr, end;
 	uint16_t magic, sum, *eep;
 	int need_swap = 0;
@@ -326,7 +315,7 @@ ar5008_read_rom(struct athn_softc *sc)
 	if (error != 0)
 		return (error);
 	if (magic != AR_EEPROM_MAGIC) {
-		if (magic != swap16(AR_EEPROM_MAGIC)) {
+		if (magic != bswap16(AR_EEPROM_MAGIC)) {
 			DPRINTF(("invalid ROM magic 0x%x != 0x%x\n",
 			    magic, AR_EEPROM_MAGIC));
 			return (EIO);
@@ -350,7 +339,7 @@ ar5008_read_rom(struct athn_softc *sc)
 			return (error);
 		}
 		if (need_swap)
-			*eep = swap16(*eep);
+			*eep = bswap16(*eep);
 		sum ^= *eep;
 	}
 	if (sum != 0xffff) {
@@ -363,27 +352,29 @@ ar5008_read_rom(struct athn_softc *sc)
 		ar5008_swap_rom(sc);
 
 	return (0);
+	return 0;
+#if 0
 #endif
 }
 
 void
 ar5008_swap_rom(struct athn_softc *sc)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
 	struct ar_base_eep_header *base = sc->eep;
 
 	/* Swap common fields first. */
-	base->length = swap16(base->length);
-	base->version = swap16(base->version);
-	base->regDmn[0] = swap16(base->regDmn[0]);
-	base->regDmn[1] = swap16(base->regDmn[1]);
-	base->rfSilent = swap16(base->rfSilent);
-	base->blueToothOptions = swap16(base->blueToothOptions);
-	base->deviceCap = swap16(base->deviceCap);
+	base->length = bswap16(base->length);
+	base->version = bswap16(base->version);
+	base->regDmn[0] = bswap16(base->regDmn[0]);
+	base->regDmn[1] = bswap16(base->regDmn[1]);
+	base->rfSilent = bswap16(base->rfSilent);
+	base->blueToothOptions = bswap16(base->blueToothOptions);
+	base->deviceCap = bswap16(base->deviceCap);
 
 	/* Swap device-dependent fields. */
 	sc->ops.swap_rom(sc);
+#if 0
+	printf("%s unimplemented\n", __func__);
 #endif
 }
 
