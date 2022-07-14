@@ -466,9 +466,9 @@ struct athn_softc {
 
 	bus_dma_tag_t			sc_dmat;
 
+	struct callout			scan_to;
+	struct callout			calib_to;
 #if 0
-	struct timeout			scan_to;
-	struct timeout			calib_to;
 	struct ieee80211_amrr		amrr;
 #endif
 

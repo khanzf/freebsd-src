@@ -201,24 +201,28 @@ struct cfdriver athn_cd = {
 void
 athn_config_ht(struct athn_softc *sc)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
+	printf("%s implementing\n", __func__);
 	struct ieee80211com *ic = &sc->sc_ic;
-	int i, ntxstreams, nrxstreams;
+//	int i, ntxstreams, nrxstreams;
+	int ntxstreams, nrxstreams;
 
 	if ((sc->flags & ATHN_FLAG_11N) == 0)
 		return;
 
 	/* Set HT capabilities. */
-	ic->ic_htcaps = (IEEE80211_HTCAP_SMPS_DIS <<
-	    IEEE80211_HTCAP_SMPS_SHIFT);
+	// XXX Guess based on OpenBSD's values 
+	ic->ic_htcaps = IEEE80211_HTCAP_SMPS_OFF;
+//	ic->ic_htcaps = (IEEE80211_HTCAP_SMPS_DIS <<
+//	    IEEE80211_HTCAP_SMPS_SHIFT);
 #ifdef notyet
-	ic->ic_htcaps |= IEEE80211_HTCAP_CBW20_40 |
-	    IEEE80211_HTCAP_SGI40 |
+	ic->ic_htcaps |= IEEE80211_HTCAP_CHWIDTH40 |
+	    IEEE80211_HTCAP_SHORTGI40  |
 	    IEEE80211_HTCAP_DSSSCCK40;
 #endif
-	ic->ic_htxcaps = 0;
+	ic->ic_htextcaps = 0;
+//	ic->ic_htxcaps = 0;
 #ifdef notyet
+	printf("not yet set\n");
 	if (AR_SREV_9271(sc) || AR_SREV_9287_10_OR_LATER(sc))
 		ic->ic_htcaps |= IEEE80211_HTCAP_SGI20;
 	if (AR_SREV_9380_10_OR_LATER(sc))
@@ -235,17 +239,18 @@ athn_config_ht(struct athn_softc *sc)
 		nrxstreams = MIN(nrxstreams, 2);
 	}
 	/* Set supported HT rates. */
-	if (ic->ic_userflags & IEEE80211_F_NOMIMO)
-		ntxstreams = nrxstreams = 1;
-	memset(ic->ic_sup_mcs, 0, sizeof(ic->ic_sup_mcs));
-	for (i = 0; i < nrxstreams; i++)
-		ic->ic_sup_mcs[i] = 0xff;
-	ic->ic_tx_mcs_set = IEEE80211_TX_MCS_SET_DEFINED;
-	if (ntxstreams != nrxstreams) {
-		ic->ic_tx_mcs_set |= IEEE80211_TX_RX_MCS_NOT_EQUAL;
-		ic->ic_tx_mcs_set |= (ntxstreams - 1) << 2;
-	}
-#endif
+//	if (ic->ic_flags_ven & IEEE80211_F_NOMIMO)
+//		ntxstreams = nrxstreams = 1;
+	// Based on the size, it seems that ic->ic_sup_mcs is ic_modecaps
+	//memset(ic->ic_sup_mcs, 0, sizeof(ic->ic_sup_mcs));
+	memset(ic->ic_modecaps, 0, sizeof(ic->ic_modecaps));
+//	for (i = 0; i < nrxstreams; i++)
+//		ic->ic_modecaps[i] = 0xff;
+//	ic->ic_tx_mcs_set = IEEE80211_TX_MCS_SET_DEFINED;
+//	if (ntxstreams != nrxstreams) {
+//		ic->ic_tx_mcs_set |= IEEE80211_TX_RX_MCS_NOT_EQUAL;
+//		ic->ic_tx_mcs_set |= (ntxstreams - 1) << 2;
+//	}
 }
 
 int
@@ -253,6 +258,7 @@ athn_attach(struct athn_softc *sc)
 {
 	printf("-- Comes to athn_attach! ----- \n");
 	//struct ifnet *ifp = &ic->ic_if;
+	struct ieee80211com *ic = &sc->sc_ic;
 	int error;
 
 	/* Read hardware revision. */
@@ -328,9 +334,8 @@ athn_attach(struct athn_softc *sc)
 		    sc->rfsilent_pin);
 	}
 	printf("%d key cache entries\n", sc->kc_entries);
-	return 0;
-#if 0
 	//DPRINTF(("%d key cache entries\n", sc->kc_entries));
+#if 0
 	/*
 	 * In HostAP mode, the number of STAs that we can handle is
 	 * limited by the number of entries in the HW key cache.
@@ -340,6 +345,7 @@ athn_attach(struct athn_softc *sc)
 	ic->ic_max_nnodes = sc->kc_entries - IEEE80211_WEP_NKID;
 	if (ic->ic_max_nnodes > IEEE80211_CACHE_SIZE)
 		ic->ic_max_nnodes = IEEE80211_CACHE_SIZE;
+#endif
 
 //	DPRINTF(("using %s loop power control\n",
 //	    (sc->flags & ATHN_FLAG_OLPC) ? "open" : "closed"));
@@ -356,45 +362,63 @@ athn_attach(struct athn_softc *sc)
 	    ((sc->rxchainmask >> 1) & 1) +
 	    ((sc->rxchainmask >> 0) & 1);
 
-	return 0;
 	if (AR_SINGLE_CHIP(sc)) {
-		printf("%s: %s rev %d (%dT%dR), ROM rev %d, address %s\n",
-		    sc->sc_dev.dv_xname, athn_get_mac_name(sc), sc->mac_rev,
+		device_printf(sc->sc_dev, "%s rev %d (%dT%dR), ROM rev %d, address %s\n",
+		    athn_get_mac_name(sc), sc->mac_rev,
 		    sc->ntxchains, sc->nrxchains, sc->eep_rev,
-		    ether_sprintf(ic->ic_myaddr));
+		    ether_sprintf(ic->ic_macaddr));
 	} else {
-		printf("%s: MAC %s rev %d, RF %s (%dT%dR), ROM rev %d, "
+		device_printf(sc->sc_dev, "MAC %s rev %d, RF %s (%dT%dR), ROM rev %d, "
 		    "address %s\n",
-		    sc->sc_dev.dv_xname, athn_get_mac_name(sc), sc->mac_rev,
+		    athn_get_mac_name(sc), sc->mac_rev,
 		    athn_get_rf_name(sc), sc->ntxchains, sc->nrxchains,
-		    sc->eep_rev, ether_sprintf(ic->ic_myaddr));
+		    sc->eep_rev, ether_sprintf(ic->ic_macaddr));
 	}
 
-	timeout_set(&sc->scan_to, athn_next_scan, sc);
-	timeout_set(&sc->calib_to, athn_calib_to, sc);
+//	timeout_set(&sc->scan_to, athn_next_scan, sc);
+//	timeout_set(&sc->calib_to, athn_calib_to, sc);
+	// OpenBSD's timeout_set initializes function names and arguments
+	// FreeBSD's callout_init equivalent just creates the structure
+	callout_init(&sc->scan_to, 0);
+	callout_init(&sc->calib_to, 0);
 
+#if 0
 	sc->amrr.amrr_min_success_threshold =  1;
 	sc->amrr.amrr_max_success_threshold = 15;
 
+#endif
+
 	ic->ic_phytype = IEEE80211_T_OFDM;	/* not only, but not used */
 	ic->ic_opmode = IEEE80211_M_STA;	/* default to BSS mode */
-	ic->ic_state = IEEE80211_S_INIT;
+	// XXX This will be moved to the VAP laye
+//	ic->ic_state = IEEE80211_S_INIT;
 
 	/* Set device capabilities. */
 	ic->ic_caps =
-	    IEEE80211_C_WEP |		/* WEP. */
-	    IEEE80211_C_RSN |		/* WPA/RSN. */
-#ifndef IEEE80211_STA_ONLY
-	    IEEE80211_C_HOSTAP |	/* Host AP mode supported. */
-	    IEEE80211_C_APPMGT |	/* Host AP power saving supported. */
-#endif
-	    IEEE80211_C_MONITOR |	/* Monitor mode supported. */
-	    IEEE80211_C_SHSLOT |	/* Short slot time supported. */
-	    IEEE80211_C_SHPREAMBLE |	/* Short preamble supported. */
-	    IEEE80211_C_PMGT;		/* Power saving supported. */
+		IEEE80211_C_STA |
+		IEEE80211_C_WPA |			// OpenBSD's IEEE80211_C_RSN
+		IEEE80211_C_HOSTAP |		// OpenBSD's IEEE80211_C_HOSTAP
+		IEEE80211_C_PMGT |			// OpenBSD's IEEE80211_C_APPMGT
+		IEEE80211_C_MONITOR |		// OpenBSD's IEEE80211_C_MONITOR
+		IEEE80211_C_SHSLOT |		// OpenBSD's IEEE80211_C_SHSLOT
+		IEEE80211_C_SHPREAMBLE |	// OpenBSD's IEEE80211_C_SHPREAMBLE
+		IEEE80211_C_TXPMGT;			// OpenBSD's IEEE80211_C_APPMGT
+//
+//	    IEEE80211_C_WEP |		/* WEP. */
+//	    IEEE80211_C_RSN |		/* WPA/RSN. */
+//#ifndef IEEE80211_STA_ONLY
+//	    IEEE80211_C_HOSTAP |	/* Host AP mode supported. */
+//	    IEEE80211_C_APPMGT |	/* Host AP power saving supported. */
+//#endif
+//	    IEEE80211_C_MONITOR |	/* Monitor mode supported. */
+//	    IEEE80211_C_SHSLOT |	/* Short slot time supported. */
+//	    IEEE80211_C_SHPREAMBLE |	/* Short preamble supported. */
+//	    IEEE80211_C_PMGT;		/* Power saving supported. */
 
 	athn_config_ht(sc);
 
+	return 0;
+#if 0
 	/* Set supported rates. */
 	if (sc->flags & ATHN_FLAG_11G) {
 		ic->ic_sup_rates[IEEE80211_MODE_11B] =
