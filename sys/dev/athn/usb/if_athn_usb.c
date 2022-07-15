@@ -486,7 +486,8 @@ athn_usb_attach(device_t self)
 	if (error) {
 		goto fail;
 	}
-	goto fail;
+	printf("Disabling auto-delete!!\n");
+//	goto fail;
 	return 0;
 
 fail:
