@@ -257,8 +257,8 @@ int
 athn_attach(struct athn_softc *sc)
 {
 	printf("-- Comes to athn_attach! ----- \n");
-	//struct ifnet *ifp = &ic->ic_if;
 	struct ieee80211com *ic = &sc->sc_ic;
+//	struct ifnet *ifp = &ic->ic_if;
 	int error;
 
 	/* Read hardware revision. */
@@ -417,35 +417,45 @@ athn_attach(struct athn_softc *sc)
 
 	athn_config_ht(sc);
 
-	return 0;
-#if 0
 	/* Set supported rates. */
+#if 0
 	if (sc->flags & ATHN_FLAG_11G) {
 		ic->ic_sup_rates[IEEE80211_MODE_11B] =
-		    ieee80211_std_rateset_11b;
+			ieee80211_rateset_11b;
+		    //ieee80211_std_rateset_11b;
 		ic->ic_sup_rates[IEEE80211_MODE_11G] =
-		    ieee80211_std_rateset_11g;
+		    ieee80211_rateset_11g;
+		    //ieee80211_std_rateset_11g;
 	}
 	if (sc->flags & ATHN_FLAG_11A) {
 		ic->ic_sup_rates[IEEE80211_MODE_11A] =
-		    ieee80211_std_rateset_11a;
+		    ieee80211_rateset_11a;
+		    //ieee80211_std_rateset_11a;
 	}
+#endif // Not sure where the values above are set
 
 	/* Get the list of authorized/supported channels. */
 	athn_get_chanlist(sc);
 
 	/* IBSS channel undefined for now. */
-	ic->ic_ibss_chan = &ic->ic_channels[0];
+	ic->ic_bsschan = &ic->ic_channels[0];
 
+	// THIS IS HANDLED AT THE VAP LEVEL!
+	/*
 	ifp->if_softc = sc;
 	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
 	ifp->if_ioctl = athn_ioctl;
 	ifp->if_start = athn_start;
 	ifp->if_watchdog = athn_watchdog;
-	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
+	*/
+//	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 
-	if_attach(ifp);
-	ieee80211_ifattach(ifp);
+//	if_attach(ifp);
+	printf("ieee80211_ifattach happens...\n");
+	ieee80211_ifattach(ic);
+	return 0;
+	//ieee80211_ifattach(ifp);
+#if 0
 	ic->ic_node_alloc = athn_node_alloc;
 	ic->ic_newassoc = athn_newassoc;
 	ic->ic_updateslot = athn_updateslot;
@@ -463,7 +473,7 @@ athn_attach(struct athn_softc *sc)
 #endif
 
 	return (0);
-	#endif
+#endif
 }
 
 void
@@ -519,8 +529,6 @@ athn_radiotap_attach(struct athn_softc *sc)
 void
 athn_get_chanlist(struct athn_softc *sc)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
 	struct ieee80211com *ic = &sc->sc_ic;
 	uint8_t chan;
 	int i;
@@ -549,7 +557,6 @@ athn_get_chanlist(struct athn_softc *sc)
 				    IEEE80211_CHAN_HT;
 		}
 	}
-#endif
 }
 
 void
