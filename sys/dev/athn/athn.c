@@ -437,6 +437,14 @@ athn_attach(struct athn_softc *sc)
 	/* Get the list of authorized/supported channels. */
 	athn_get_chanlist(sc);
 
+	for(int i = 0;i<ic->ic_nchans;i++) {
+		printf("Chan: %d\tFlags: %0x02\n", i, ic->ic_channels[i].ic_flags);
+		if (ic->ic_channels[i].ic_flags == 0) {
+			printf("Flags is 0\n");
+			ic->ic_channels[i].ic_flags = 0x0;
+		}
+	}
+
 	/* IBSS channel undefined for now. */
 	ic->ic_bsschan = &ic->ic_channels[0];
 
@@ -452,6 +460,7 @@ athn_attach(struct athn_softc *sc)
 
 //	if_attach(ifp);
 	printf("ieee80211_ifattach happens...\n");
+	printf("ic_nchans: %d\n", ic->ic_nchans);
 	ieee80211_ifattach(ic);
 	return 0;
 	//ieee80211_ifattach(ifp);
@@ -534,7 +543,8 @@ athn_get_chanlist(struct athn_softc *sc)
 	int i;
 
 	if (sc->flags & ATHN_FLAG_11G) {
-		for (i = 1; i <= 14; i++) {
+		ic->ic_nchans = 14;
+		for (i = 0; i < 14; i++) {
 			chan = i;
 			ic->ic_channels[chan].ic_freq =
 			    ieee80211_ieee2mhz(chan, IEEE80211_CHAN_2GHZ);
@@ -544,9 +554,12 @@ athn_get_chanlist(struct athn_softc *sc)
 			if (sc->flags & ATHN_FLAG_11N)
 				ic->ic_channels[chan].ic_flags |=
 				    IEEE80211_CHAN_HT;
+			printf("2g Chan: %d 0x%02x\n", chan, ic->ic_channels[chan].ic_flags); 
 		}
 	}
 	if (sc->flags & ATHN_FLAG_11A) {
+		printf("Adding 5ghz channels...\n");
+		ic->ic_nchans += nitems(athn_5ghz_chans);
 		for (i = 0; i < nitems(athn_5ghz_chans); i++) {
 			chan = athn_5ghz_chans[i];
 			ic->ic_channels[chan].ic_freq =
@@ -555,8 +568,11 @@ athn_get_chanlist(struct athn_softc *sc)
 			if (sc->flags & ATHN_FLAG_11N)
 				ic->ic_channels[chan].ic_flags |=
 				    IEEE80211_CHAN_HT;
+			printf("5g Chan: %d 0x%02x\n", chan, ic->ic_channels[chan].ic_flags); 
 		}
 	}
+
+//	ic->ic_nchans--;
 }
 
 void
