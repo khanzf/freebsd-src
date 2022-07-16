@@ -491,6 +491,7 @@ athn_usb_attach(device_t self)
 	return 0;
 
 fail:
+	printf("Detaching...\n");
 	athn_usb_detach(self);
 	return (ENXIO);
 }
