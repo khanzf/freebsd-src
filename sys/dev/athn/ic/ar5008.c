@@ -393,8 +393,6 @@ void
 ar5008_gpio_write(struct athn_softc *sc, int pin, int set)
 {
 
-	printf("%s unimplemented\n", __func__);
-#if 0
 	uint32_t reg;
 
 	KASSERT(pin < sc->ngpiopins, ("ar5008_gpio_write"));
@@ -419,6 +417,7 @@ ar5008_gpio_write(struct athn_softc *sc, int pin, int set)
 		AR_WRITE(sc, AR_GPIO_IN_OUT, reg);
 	}
 	AR_WRITE_BARRIER(sc);
+#if 0
 #endif
 }
 
@@ -445,8 +444,6 @@ ar5008_gpio_config_input(struct athn_softc *sc, int pin)
 void
 ar5008_gpio_config_output(struct athn_softc *sc, int pin, int type)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
 	uint32_t reg;
 	int mux, off;
 
@@ -471,6 +468,7 @@ ar5008_gpio_config_output(struct athn_softc *sc, int pin, int type)
 	reg |= AR_GPIO_OE_OUT_DRV_ALL << (pin * 2);
 	AR_WRITE(sc, AR_GPIO_OE_OUT, reg);
 	AR_WRITE_BARRIER(sc);
+#if 0
 #endif
 }
 
