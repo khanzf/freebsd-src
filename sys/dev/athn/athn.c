@@ -2421,8 +2421,6 @@ athn_set_bss(struct athn_softc *sc, struct ieee80211_node *ni)
 void
 athn_enable_interrupts(struct athn_softc *sc)
 {
-	printf("%s unimplemented...\n", __func__);
-#if 0
 	uint32_t mask2;
 
 	athn_disable_interrupts(sc);	/* XXX */
@@ -2445,14 +2443,11 @@ athn_enable_interrupts(struct athn_softc *sc)
 	AR_WRITE(sc, AR_INTR_SYNC_ENABLE, sc->isync);
 	AR_WRITE(sc, AR_INTR_SYNC_MASK, sc->isync);
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 void
 athn_disable_interrupts(struct athn_softc *sc)
 {
-	printf("%s unimplemented...\n", __func__);
-#if 0
 	AR_WRITE(sc, AR_IER, 0);
 	(void)AR_READ(sc, AR_IER);
 
@@ -2470,14 +2465,11 @@ athn_disable_interrupts(struct athn_softc *sc)
 
 	AR_CLRBITS(sc, AR_IMR_S5, AR_IMR_S5_TIM_TIMER);
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 void
 athn_init_qos(struct athn_softc *sc)
 {
-	printf("%s unimplemented...\n", __func__);
-#if 0
 	/* Initialize QoS settings. */
 	AR_WRITE(sc, AR_MIC_QOS_CONTROL, 0x100aa);
 	AR_WRITE(sc, AR_MIC_QOS_SELECT, 0x3210);
@@ -2492,7 +2484,6 @@ athn_init_qos(struct athn_softc *sc)
 	AR_WRITE(sc, AR_TXOP_8_11,  0xffffffff);
 	AR_WRITE(sc, AR_TXOP_12_15, 0xffffffff);
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 int
