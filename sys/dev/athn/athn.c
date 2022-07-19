@@ -144,7 +144,7 @@ void		athn_newassoc(struct ieee80211com *, struct ieee80211_node *,
 		    int);
 int		athn_media_change(struct ifnet *);
 void		athn_next_scan(void *);
-int		athn_newstate(struct ieee80211com *, enum ieee80211_state,
+int		athn_newstate(struct ieee80211vap *, enum ieee80211_state,
 		    int);
 void		athn_updateedca(struct ieee80211com *);
 int		athn_clock_rate(struct athn_softc *);
@@ -251,6 +251,45 @@ athn_config_ht(struct athn_softc *sc)
 //		ic->ic_tx_mcs_set |= IEEE80211_TX_RX_MCS_NOT_EQUAL;
 //		ic->ic_tx_mcs_set |= (ntxstreams - 1) << 2;
 //	}
+}
+
+static struct ieee80211vap *
+athn_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
+	enum ieee80211_opmode opmode, int flags,
+	const uint8_t bssid[IEEE80211_ADDR_LEN],
+	const uint8_t mac[IEEE80211_ADDR_LEN])
+{
+//	struct athn_softc *sc = ic->ic_softc;
+	struct athn_vap *avp;
+	struct ieee80211vap *vap;
+//	struct ifnet *ifp;
+
+	/* From zyd and rsu, not sure if this applies to athn */
+//	if (!TAILQ_EMPTY(&ic->ic_vaps)) {
+//		printf("VAP create returns null\n");
+//		return (NULL);
+//	}
+
+	avp = malloc(sizeof(struct athn_vap), M_80211_VAP, M_WAITOK | M_ZERO);
+	vap = &avp->vap;
+
+	if(ieee80211_vap_setup(ic, vap, name, unit, opmode, flags, bssid) != 0) {
+		free(avp, M_80211_VAP);
+		return (NULL);
+	}
+
+	/* override state transition machine */
+	avp->newstate = vap->iv_newstate;
+	vap->iv_newstate = athn_newstate;
+
+	ieee80211_vap_attach(vap, ieee80211_media_change,
+		ieee80211_media_status, mac);
+	ic->ic_opmode = opmode;
+
+	return(vap);
+
+	//ifp = vap->iv_ifp;
+	//ifp->if_capabilities = ???;
 }
 
 int
@@ -462,6 +501,7 @@ athn_attach(struct athn_softc *sc)
 	printf("ieee80211_ifattach happens...\n");
 	printf("ic_nchans: %d\n", ic->ic_nchans);
 	ieee80211_ifattach(ic);
+	ic->ic_vap_create = athn_vap_create;
 	return 0;
 	//ieee80211_ifattach(ifp);
 #if 0
@@ -2824,66 +2864,71 @@ athn_next_scan(void *arg)
 }
 
 int
-athn_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
+athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 {
-	printf("%s unimplemented...\n", __func__);
-	return 0;
-#if 0
-	struct ifnet *ifp = &ic->ic_if;
-	struct athn_softc *sc = ifp->if_softc;
+	printf("Not Finished: %s\n", __func__);
+	//struct ifnet *ifp = &ic->ic_if;
+	struct ieee80211com *ic = vap->iv_ic;
+	struct athn_softc *sc = ic->ic_softc;
 	uint32_t reg;
 	int error;
 
-	timeout_del(&sc->calib_to);
+//	timeout_del(&sc->calib_to);
+	callout_stop(&sc->calib_to);
 
 	switch (nstate) {
 	case IEEE80211_S_INIT:
+		printf("Mode: IEEE80211_S_INIT\n");
 		athn_set_led(sc, 0);
 		break;
 	case IEEE80211_S_SCAN:
+		printf("Mode: IEEE80211_S_SCAN\n");
 		/* Make the LED blink while scanning. */
 		athn_set_led(sc, !sc->led_state);
-		error = athn_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
+		error = athn_switch_chan(sc, vap->iv_bss->ni_chan, NULL);
 		if (error != 0)
 			return (error);
-		timeout_add_msec(&sc->scan_to, 200);
+		//timeout_add_msec(&sc->scan_to, 200);
 		break;
 	case IEEE80211_S_AUTH:
+		printf("Mode: IEEE80211_S_AUTH\n");
 		athn_set_led(sc, 0);
-		error = athn_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
+		error = athn_switch_chan(sc, vap->iv_bss->ni_chan, NULL);
 		if (error != 0)
 			return (error);
 		break;
 	case IEEE80211_S_ASSOC:
+		printf("Mode: IEEE80211_S_ASSOC\n");
 		break;
 	case IEEE80211_S_RUN:
+		printf("Mode: IEEE80211_S_RUN\n");
 		athn_set_led(sc, 1);
-#ifndef IEEE80211_STA_ONLY
+//#ifndef IEEE80211_STA_ONLY
 		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
-			error = athn_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
+			error = athn_switch_chan(sc, vap->iv_bss->ni_chan, NULL);
 			if (error != 0)
 				return (error);
 		} else
-#endif
+//#endif
 		if (ic->ic_opmode == IEEE80211_M_MONITOR) {
-			error = athn_switch_chan(sc, ic->ic_ibss_chan, NULL);
+			error = athn_switch_chan(sc, ic->ic_bsschan, NULL);
 			if (error != 0)
 				return (error);
 			break;
 		}
 
 		/* Fake a join to initialize the Tx rate. */
-		athn_newassoc(ic, ic->ic_bss, 1);
+		athn_newassoc(ic, vap->iv_bss, 1);
 
-		athn_set_bss(sc, ic->ic_bss);
+		athn_set_bss(sc, vap->iv_bss);
 		athn_disable_interrupts(sc);
-#ifndef IEEE80211_STA_ONLY
+//#ifndef IEEE80211_STA_ONLY
 		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
 			athn_set_hostap_timers(sc);
 			/* Enable software beacon alert interrupts. */
 			sc->imask |= AR_IMR_SWBA;
 		} else
-#endif
+//#endif
 		{
 			athn_set_sta_timers(sc);
 			/* Enable beacon miss interrupts. */
@@ -2906,12 +2951,17 @@ athn_newstate(struct ieee80211com *ic, enum ieee80211_state nstate, int arg)
 		/* XXX Start ANI. */
 
 		athn_start_noisefloor_calib(sc, 1);
-		timeout_add_msec(&sc->calib_to, 500);
+		//timeout_add_msec(&sc->calib_to, 500);
+		break;
+	case IEEE80211_S_CAC:
+	case IEEE80211_S_CSA:
+	case IEEE80211_S_SLEEP:
+	default:
+		printf("default case\n");
 		break;
 	}
 
 	return (sc->sc_newstate(ic, nstate, arg));
-#endif
 }
 
 void
