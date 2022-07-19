@@ -379,14 +379,10 @@ ar5008_swap_rom(struct athn_softc *sc)
 int
 ar5008_gpio_read(struct athn_softc *sc, int pin)
 {
-	printf("%s unimplemented\n", __func__);
-	return 0;
-#if 0
 	KASSERT(pin < sc->ngpiopins, ("ar5008_gpio_read"));
 	if ((sc->flags & ATHN_FLAG_USB) && !AR_SREV_9271(sc))
 		return (!((AR_READ(sc, AR7010_GPIO_IN) >> pin) & 1));
 	return ((AR_READ(sc, AR_GPIO_IN_OUT) >> (sc->ngpiopins + pin)) & 1);
-#endif
 }
 
 void
@@ -424,8 +420,6 @@ ar5008_gpio_write(struct athn_softc *sc, int pin, int set)
 void
 ar5008_gpio_config_input(struct athn_softc *sc, int pin)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
 	uint32_t reg;
 
 	if ((sc->flags & ATHN_FLAG_USB) && !AR_SREV_9271(sc)) {
@@ -438,7 +432,6 @@ ar5008_gpio_config_input(struct athn_softc *sc, int pin)
 		AR_WRITE(sc, AR_GPIO_OE_OUT, reg);
 	}
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 void
@@ -468,15 +461,11 @@ ar5008_gpio_config_output(struct athn_softc *sc, int pin, int type)
 	reg |= AR_GPIO_OE_OUT_DRV_ALL << (pin * 2);
 	AR_WRITE(sc, AR_GPIO_OE_OUT, reg);
 	AR_WRITE_BARRIER(sc);
-#if 0
-#endif
 }
 
 void
 ar5008_rfsilent_init(struct athn_softc *sc)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
 	uint32_t reg;
 
 	/* Configure hardware radio switch. */
@@ -491,7 +480,6 @@ ar5008_rfsilent_init(struct athn_softc *sc)
 		    AR_GPIO_INTR_POL_PIN(sc->rfsilent_pin));
 	}
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 int

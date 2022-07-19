@@ -447,7 +447,7 @@ athn_usb_attach(device_t self)
 
 	usc->sc_udev = uaa->device;
 	usc->sc_iface = uaa->iface;
-
+	sc->sc_dev = self;
 
 	//usc->flags = athn_usb_lookup(uaa->vendor, uaa->product)->flags; // OpenBSD
 	usc->flags = 0x0;
@@ -536,11 +536,14 @@ athn_usb_attachhook(device_t self)
 //	struct usb_attach_arg *uaa = device_get_ivars(self);
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
+	struct ieee80211com *ic = &sc->sc_ic;
 //	struct athn_ops *ops = &sc->ops;
 //	struct ieee80211com *ic = &sc->sc_ic;
 //	struct ifnet *ifp = &ic->ic_if;
 //	int s, i, error;
 	int error;
+
+	device_printf(sc->sc_dev, "Start of device!\n");
 
 	/* Load firmware. */
 	error = athn_usb_load_firmware(usc);
@@ -605,6 +608,9 @@ athn_usb_attachhook(device_t self)
 #endif // End of the FreeBSD stuff
 	/* Configure LED. */
 	athn_led_init(sc);
+
+	if (bootverbose)
+		ieee80211_announce(ic);
 	return 0;
 }
 

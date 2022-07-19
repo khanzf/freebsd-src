@@ -643,4 +643,9 @@ extern int	athn_intr(void *);
 #define ATHN_CMDQ_LOCK_INIT(sc) \
 	mtx_init(&(sc)->cmdq_mtx, "cmdq lock", NULL, MTX_DEF)
 
+struct athn_vap {
+	struct ieee80211vap vap;
+	int		(*newstate)(struct ieee80211vap *, enum ieee80211_state, int);
+};
+
 #endif /* ATHNVAR_H */
