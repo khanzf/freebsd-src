@@ -182,7 +182,7 @@ int		athn_usb_tx(struct athn_softc *, struct mbuf *,
 		    struct ieee80211_node *);
 void		athn_usb_start(struct ifnet *);
 void		athn_usb_watchdog(struct ifnet *);
-int		athn_usb_ioctl(struct ifnet *, u_long, caddr_t);
+int		athn_usb_ioctl(struct ieee80211com *, u_long, void *);
 int		athn_usb_init(struct ifnet *);
 static int		athn_usb_stop(device_t);
 void		ar9271_load_ani(struct athn_softc *);
@@ -643,7 +643,7 @@ athn_usb_attachhook(device_t self)
 	// Attach VAP-specific "stuff"
 	ic->ic_vap_create = athn_usb_vap_create;
 	ic->ic_vap_delete = athn_usb_vap_delete; // Not finished
-//	ifp->if_ioctl = athn_usb_ioctl;
+//	ic->ic_ioctl = athn_usb_ioctl;
 //	ifp->if_start = athn_usb_start;
 //	ifp->if_watchdog = athn_usb_watchdog;
 	ic->ic_node_alloc = athn_usb_node_alloc;
@@ -3252,26 +3252,26 @@ athn_usb_watchdog(struct ifnet *ifp)
 }
 
 int
-athn_usb_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
+athn_usb_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 {
-	printf("%s unimplemented.\n", __func__);
-	return 0;
+	printf("Nothing happens!\n");
+	return (ENOTTY);
 #if 0
-	struct athn_softc *sc = ifp->if_softc;
-	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct athn_softc *sc = ic->ic_softc;
+	struct ifreq *ifr = (struct ifreq *)data;
+	struct ifnet *ifp = 
+//	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
+//	struct ieee80211com *ic = &sc->sc_ic;
 	int s, error = 0;
 
-	if (usbd_is_dying(usc->sc_udev))
-		return ENXIO;
 
-	usbd_ref_incr(usc->sc_udev);
 
-	s = splnet();
+//	usbd_ref_incr(usc->sc_udev);
 
 	switch (cmd) {
 	case SIOCSIFADDR:
-		ifp->if_flags |= IFF_UP;
+		printf("IFF_UP not implemented!\n");
+//		ifp->if_flags |= IFF_UP;
 		/* FALLTHROUGH */
 	case SIOCSIFFLAGS:
 		if (ifp->if_flags & IFF_UP) {
@@ -3295,7 +3295,8 @@ athn_usb_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		}
 		break;
 	default:
-		error = ieee80211_ioctl(ifp, cmd, data);
+		error = ENOTTY;
+//		error = ieee80211_ioctl(ifp, cmd, data);
 	}
 
 	if (error == ENETRESET) {
@@ -3306,9 +3307,8 @@ athn_usb_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			error = athn_usb_init(ifp);
 		}
 	}
-	splx(s);
 
-	usbd_ref_decr(usc->sc_udev);
+//	usbd_ref_decr(usc->sc_udev);
 
 	return (error);
 #endif
