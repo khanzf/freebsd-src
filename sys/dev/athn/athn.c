@@ -192,7 +192,9 @@ void		ar9287_1_3_setup_async_fifo(struct athn_softc *);
 void		ar9003_reset_txsring(struct athn_softc *);
 
 /* Added Definitions */
-void		 athn_config_ht(struct athn_softc *sc);
+void	athn_config_ht(struct athn_softc *sc);
+void	athn_getradiocaps(struct ieee80211com *ic,
+			int maxchans, int *nchans, struct ieee80211_channel chans[]);
 
 #if 0
 struct cfdriver athn_cd = {
@@ -471,9 +473,9 @@ athn_attach(struct athn_softc *sc)
 	ic->sc_scan_curchan = ic->ic_scan_curchan;
 	ic->ic_scan_curchan = ??
 	ic->ic_scan_end = ??
-	ic->ic_getradiocaps = ??
 	ic->ic_update_chw = ??
 	*/
+	ic->ic_getradiocaps = athn_getradiocaps;
 	ic->ic_set_channel = athn_set_chan;
 	/*
 	ic->ic_transmit = ??
@@ -3526,6 +3528,23 @@ athn_wakeup(struct athn_softc *sc)
 #endif
 }
 
+void
+athn_getradiocaps(struct ieee80211com *ic,
+	int maxchans, int *nchans, struct ieee80211_channel chans[])
+{
+//	struct athn_softc *sc = ic->ic_softc;
+	uint8_t bands[IEEE80211_MODE_BYTES];
+
+	memset(bands, 0, sizeof(bands));
+	setbit(bands, IEEE80211_MODE_11B);
+	setbit(bands, IEEE80211_MODE_11G);
+
+	ieee80211_add_channels_default_2ghz(chans, maxchans, nchans,
+		bands, 0); //(ic->ic_htcaps & IEEE80211_HTCAP, CHWIDTH40) ?
+//		NET80211_CBW_FLAG_HT40 : 0);
+}
+
+
 MODULE_VERSION(athn, 1);
-MODULE_DEPEND(ath, wlan, 1, 1, 1);
-//MODULE_DEPEND(athn, firmware, 1, 1, 1);
+MODULE_DEPEND(athn, wlan, 1, 1, 1);
+MODULE_DEPEND(athn, firmware, 1, 1, 1);
