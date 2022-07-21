@@ -97,8 +97,7 @@ void		athn_write_serdes(struct athn_softc *,
 		    const struct athn_serdes *);
 void		athn_config_pcie(struct athn_softc *);
 void		athn_config_nonpcie(struct athn_softc *);
-int		athn_set_chan(struct athn_softc *, struct ieee80211_channel *,
-		    struct ieee80211_channel *);
+void		athn_set_chan(struct ieee80211com *ic);
 int		athn_switch_chan(struct athn_softc *,
 		    struct ieee80211_channel *, struct ieee80211_channel *);
 void		athn_get_delta_slope(uint32_t, uint32_t *, uint32_t *);
@@ -139,13 +138,16 @@ void		athn_disable_interrupts(struct athn_softc *);
 void		athn_init_qos(struct athn_softc *);
 int		athn_hw_reset(struct athn_softc *, struct ieee80211_channel *,
 		    struct ieee80211_channel *, int);
-struct		ieee80211_node *athn_node_alloc(struct ieee80211com *);
-void		athn_newassoc(struct ieee80211com *, struct ieee80211_node *,
+
+static 		struct ieee80211_node *athn_node_alloc(struct ieee80211vap *,
+		const uint8_t [IEEE80211_ADDR_LEN]);
+
+void		athn_newassoc(struct ieee80211_node *,
 		    int);
 int		athn_media_change(struct ifnet *);
 void		athn_next_scan(void *);
-int		athn_newstate(struct ieee80211vap *, enum ieee80211_state,
-		    int);
+//int		athn_newstate(struct ieee80211vap *, enum ieee80211_state,
+//		    int);
 void		athn_updateedca(struct ieee80211com *);
 int		athn_clock_rate(struct athn_softc *);
 int		athn_chan_sifs(struct ieee80211_channel *);
@@ -251,45 +253,6 @@ athn_config_ht(struct athn_softc *sc)
 //		ic->ic_tx_mcs_set |= IEEE80211_TX_RX_MCS_NOT_EQUAL;
 //		ic->ic_tx_mcs_set |= (ntxstreams - 1) << 2;
 //	}
-}
-
-static struct ieee80211vap *
-athn_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
-	enum ieee80211_opmode opmode, int flags,
-	const uint8_t bssid[IEEE80211_ADDR_LEN],
-	const uint8_t mac[IEEE80211_ADDR_LEN])
-{
-//	struct athn_softc *sc = ic->ic_softc;
-	struct athn_vap *avp;
-	struct ieee80211vap *vap;
-//	struct ifnet *ifp;
-
-	/* From zyd and rsu, not sure if this applies to athn */
-//	if (!TAILQ_EMPTY(&ic->ic_vaps)) {
-//		printf("VAP create returns null\n");
-//		return (NULL);
-//	}
-
-	avp = malloc(sizeof(struct athn_vap), M_80211_VAP, M_WAITOK | M_ZERO);
-	vap = &avp->vap;
-
-	if(ieee80211_vap_setup(ic, vap, name, unit, opmode, flags, bssid) != 0) {
-		free(avp, M_80211_VAP);
-		return (NULL);
-	}
-
-	/* override state transition machine */
-	avp->newstate = vap->iv_newstate;
-	vap->iv_newstate = athn_newstate;
-
-	ieee80211_vap_attach(vap, ieee80211_media_change,
-		ieee80211_media_status, mac);
-	ic->ic_opmode = opmode;
-
-	return(vap);
-
-	//ifp = vap->iv_ifp;
-	//ifp->if_capabilities = ???;
 }
 
 int
@@ -501,7 +464,38 @@ athn_attach(struct athn_softc *sc)
 	printf("ieee80211_ifattach happens...\n");
 	printf("ic_nchans: %d\n", ic->ic_nchans);
 	ieee80211_ifattach(ic);
-	ic->ic_vap_create = athn_vap_create;
+
+	/*
+	ic->ic_raw_xmit = ??
+	ic->sc_scan_start = ??
+	ic->sc_scan_curchan = ic->ic_scan_curchan;
+	ic->ic_scan_curchan = ??
+	ic->ic_scan_end = ??
+	ic->ic_getradiocaps = ??
+	ic->ic_update_chw = ??
+	*/
+	ic->ic_set_channel = athn_set_chan;
+	/*
+	ic->ic_transmit = ??
+	ic->ic_parent = ??
+	*/
+//	ic->ic_vap_create = athn_vap_create;
+//	ic->ic_vap_delete = athn_vap_delete; // Not finished
+	/*
+	ic->ic_wme.wme_update = ??
+	*/
+//	ic->ic_updateslot = athn_updateslot; 
+	/*
+	ic->ic_update_promisc = ??
+	ic->ic_update_mcast = ??
+	*/
+//	ic->ic_node_alloc = athn_node_alloc; 
+//	ic->ic_newassoc = athn_newassoc; 
+	/*
+	sc->sc_node_free = ic->ic_node_free;
+	ic->ic_node_free = ??
+	*/
+
 	return 0;
 	//ieee80211_ifattach(ifp);
 #if 0
@@ -1034,50 +1028,64 @@ athn_config_nonpcie(struct athn_softc *sc)
 	athn_write_serdes(sc, &ar_nonpcie_serdes);
 }
 
-int
-athn_set_chan(struct athn_softc *sc, struct ieee80211_channel *c,
-    struct ieee80211_channel *extc)
+void
+athn_set_chan(struct ieee80211com *ic)
 {
+	struct athn_softc *sc = ic->ic_softc;
 	struct athn_ops *ops = &sc->ops;
 	int error, qid;
+	struct ieee80211_channel *extc = NULL;
+
+	printf("Setting channel!\n");
 
 	/* Check that Tx is stopped, otherwise RF Bus grant will not work. */
 	for (qid = 0; qid < ATHN_QID_COUNT; qid++)
-		if (athn_tx_pending(sc, qid))
-			return (EBUSY);
+		if (athn_tx_pending(sc, qid)) {
+			printf("EBUSY\n");
+			return;
+			//return (EBUSY);
+		}
 
 	/* Request RF Bus grant. */
-	if ((error = ops->rf_bus_request(sc)) != 0)
-		return (error);
+	if ((error = ops->rf_bus_request(sc)) != 0) {
+		printf("Request RF Bus: error = %d\n", error);
+		return;
+//		return (error);
+	}
 
-	ops->set_phy(sc, c, extc);
+	printf("Was ic->ic_curchan changed?\n");
+	ops->set_phy(sc, ic->ic_curchan, extc);
 
 	/* Change the synthesizer. */
-	if ((error = ops->set_synth(sc, c, extc)) != 0)
-		return (error);
+	if ((error = ops->set_synth(sc, ic->ic_curchan, extc)) != 0) {
+		printf("Change the synthesizer: error = %d\n", error);
+		return;
+//		return (error);
+	}
 
-	sc->curchan = c;
+	sc->curchan = ic->ic_curchan;
 	sc->curchanext = extc;
 
 	/* Set transmit power values for new channel. */
-	ops->set_txpower(sc, c, extc);
+	ops->set_txpower(sc, ic->ic_curchan, extc);
 
 	/* Release the RF Bus grant. */
 	ops->rf_bus_release(sc);
 
 	/* Write delta slope coeffs for modes where OFDM may be used. */
 	if (sc->sc_ic.ic_curmode != IEEE80211_MODE_11B)
-		ops->set_delta_slope(sc, c, extc);
+		ops->set_delta_slope(sc, ic->ic_curchan, extc);
 
-	ops->spur_mitigate(sc, c, extc);
+	ops->spur_mitigate(sc, ic->ic_curchan, extc);
 
-	return (0);
+	printf("End of set channel\n");
 }
 
 int
 athn_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
+	struct ieee80211com *ic = &sc->sc_ic;
 	int error, qid;
 
 	/* Disable interrupts. */
@@ -1116,18 +1124,24 @@ athn_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 	if (error != 0)
 		goto reset;
 
-	error = athn_set_chan(sc, c, extc);
-	if (error != 0) {
- reset:		/* Error found, try a full reset. */
-		DPRINTFN(3, ("needs a full reset\n"));
-		error = athn_hw_reset(sc, c, extc, 0);
-		if (error != 0)	/* Hopeless case. */
-			return (error);
-	}
+	athn_set_chan(ic);
+	printf("Need to figure out if an error here occurs...\n");
 	athn_rx_start(sc);
 
 	/* Re-enable interrupts. */
 	athn_enable_interrupts(sc);
+	return (0);
+
+reset:		/* Error found, try a full reset. */
+	DPRINTFN(3, ("needs a full reset\n"));
+	error = athn_hw_reset(sc, c, extc, 0);
+	if (error != 0)	{ /* Hopeless case. */
+		printf("Channel error occurs %d\n", error);
+		return (error);
+	}
+
+	athn_rx_start(sc);
+
 	return (0);
 }
 
@@ -2718,26 +2732,36 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 #endif
 }
 
-struct ieee80211_node *
-athn_node_alloc(struct ieee80211com *ic)
+static struct ieee80211_node *
+athn_node_alloc(struct ieee80211vap *vap, const uint8_t mac[IEEE80211_ADDR_LEN])
 {
-	printf("%s unimplemented...\n", __func__);
-	return NULL;
+	printf("This function should be over-written: %s unimplemented...\n", __func__);
+	return (NULL);
 #if 0
+//	printf("%s unimplemented...\n", __func__);
+//	return NULL;
+//#if 0
+	printf("Compare this function against other ic_node_alloc implementations...\n");
 	struct athn_node *an;
 
-	an = malloc(sizeof(struct athn_node), M_DEVBUF, M_NOWAIT | M_ZERO);
-	if (an && (ic->ic_flags & IEEE80211_F_HTON))
-		ieee80211_ra_node_init(&an->rn);
+	an = malloc(sizeof(struct athn_node), M_80211_NODE, M_NOWAIT | M_ZERO);
+	if (an == NULL)
+		return NULL;
+
+//	if (an && (ic->ic_htcaps & IEEE80211_HTC_HT))
+//		ieee80211_ra_node_init(&an->rn);
 	return (struct ieee80211_node *)an;
 #endif
 }
 
 void
-athn_newassoc(struct ieee80211com *ic, struct ieee80211_node *ni, int isnew)
+athn_newassoc(struct ieee80211_node *ni, int isnew)
 {
-	printf("%s unimplemented...\n", __func__);
 #if 0
+	printf("%s unimplemented...\n", __func__);
+	struct athn_node *an = ((struct athn_node *)(ni));
+	struct ieee80211vap *vap = ni->ni_vap;
+	struct athn_softc *sc = vap->iv_ic->ic_softc;
 	struct athn_softc *sc = ic->ic_softc;
 	struct athn_node *an = (void *)ni;
 	struct ieee80211_rateset *rs = &ni->ni_rates;
@@ -2909,7 +2933,7 @@ athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		}
 
 		/* Fake a join to initialize the Tx rate. */
-		athn_newassoc(ic, vap->iv_bss, 1);
+		athn_newassoc(vap->iv_bss, 1);
 
 		athn_set_bss(sc, vap->iv_bss);
 		athn_disable_interrupts(sc);
@@ -3100,7 +3124,7 @@ athn_setclockrate(struct athn_softc *sc)
 void
 athn_updateslot(struct ieee80211com *ic)
 {
-	printf("%s unimplemented...\n", __func__);
+	printf("This should be overwritten: %s unimplemented...\n", __func__);
 #if 0
 	struct athn_softc *sc = ic->ic_softc;
 	int slot;
@@ -3409,6 +3433,7 @@ athn_init(struct ifnet *ifp)
 
 	return (0);
  fail:
+	athn_stop(ifp, 1);
 	athn_stop(ifp, 1);
 	return (error);
 #endif
