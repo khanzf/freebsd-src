@@ -131,10 +131,9 @@ void		athn_usb_next_scan(void *);
 int		athn_usb_newstate(struct ieee80211com *, enum ieee80211_state,
 		    int);
 void		athn_usb_newstate_cb(struct athn_usb_softc *, void *);
-void		athn_usb_newassoc(struct ieee80211com *,
-		    struct ieee80211_node *, int);
+void		athn_usb_newassoc(struct ieee80211_node *, int);
 void		athn_usb_newassoc_cb(struct athn_usb_softc *, void *);
-struct ieee80211_node *athn_usb_node_alloc(struct ieee80211com *);
+struct ieee80211_node *athn_usb_node_alloc(struct ieee80211vap *, const uint8_t mac[IEEE80211_ADDR_LEN]);
 void		athn_usb_count_active_sta(void *, struct ieee80211_node *);
 void		athn_usb_newauth_cb(struct athn_usb_softc *, void *);
 int		athn_usb_newauth(struct ieee80211com *,
@@ -164,11 +163,9 @@ void		athn_usb_updateedca(struct ieee80211com *);
 void		athn_usb_updateedca_cb(struct athn_usb_softc *, void *);
 void		athn_usb_updateslot(struct ieee80211com *);
 void		athn_usb_updateslot_cb(struct athn_usb_softc *, void *);
-int		athn_usb_set_key(struct ieee80211com *,
-		    struct ieee80211_node *, struct ieee80211_key *);
+int		athn_usb_set_key(struct ieee80211vap *, const struct ieee80211_key *);
 void		athn_usb_set_key_cb(struct athn_usb_softc *, void *);
-void		athn_usb_delete_key(struct ieee80211com *,
-		    struct ieee80211_node *, struct ieee80211_key *);
+int			athn_usb_delete_key(struct ieee80211vap *, const struct ieee80211_key *);
 void		athn_usb_delete_key_cb(struct athn_usb_softc *, void *);
 void		athn_usb_bcneof(struct usbd_xfer *, void *);
 void		athn_usb_swba(struct athn_usb_softc *);
@@ -530,6 +527,74 @@ athn_usb_detach(device_t self)
 #endif
 }
 
+static void
+athn_usb_vap_delete(struct ieee80211vap *vap)
+{
+	printf("athn_usb_vap_delete Unimplemented! Memory leak\n");
+}
+
+static struct ieee80211vap *
+athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
+	enum ieee80211_opmode opmode, int flags,
+	const uint8_t bssid[IEEE80211_ADDR_LEN],
+	const uint8_t mac[IEEE80211_ADDR_LEN])
+{
+	struct athn_softc *sc = ic->ic_softc;
+	struct athn_vap *avp;
+	struct ieee80211vap *vap;
+//	struct ifnet *ifp;
+
+	/* From zyd and rsu, not sure if this applies to athn */
+//	if (!TAILQ_EMPTY(&ic->ic_vaps)) {
+//		printf("VAP create returns null\n");
+//		return (NULL);
+//	}
+
+	avp = malloc(sizeof(struct athn_vap), M_80211_VAP, M_WAITOK | M_ZERO);
+	vap = &avp->vap;
+
+	if(ieee80211_vap_setup(ic, vap, name, unit, opmode, flags, bssid) != 0) {
+		free(avp, M_80211_VAP);
+		return (NULL);
+	}
+
+	/* override state transition machine */
+	avp->newstate = vap->iv_newstate;
+	vap->iv_newstate = athn_newstate;
+
+//	vap->vp_set_key = athn_usb_set_key;
+//	vap->vp_delete_key = athn_usb_delete_key;
+
+/*
+	vap->iv_update_beacon = ??
+	vap->iv_reset = ??
+	vap->iv_key_alloc = ??
+	vap->iv_key_set = athn_usb_set_key;
+	vap->iv_key_delete = athn_usb_delete_key;
+	vap->iv_max_aid = ??
+
+	vap->iv_ampdu_density = ??
+	vap->iv_ampdu_rxmax = ??
+
+	vap->iv_recv_mgmt = ??
+*/
+
+	ieee80211_vap_attach(vap, ieee80211_media_change,
+		ieee80211_media_status, mac);
+	ic->ic_opmode = opmode;
+
+	/* BUS-specific additions */
+	printf("iv_key_delete: %p\n", vap->iv_key_delete);
+	printf("sc_key_delete: %p\n", sc->sc_key_delete);
+	//vap->iv_key_delete = sc->sc_key_delete;
+	//vap->iv_key_set = sc->sc_key_set;
+
+	return(vap);
+
+	//ifp = vap->iv_ifp;
+	//ifp->if_capabilities = ???;
+}
+
 int
 athn_usb_attachhook(device_t self)
 {
@@ -545,6 +610,8 @@ athn_usb_attachhook(device_t self)
 
 	device_printf(sc->sc_dev, "Start of device!\n");
 
+	ic->ic_softc = sc;
+
 	/* Load firmware. */
 	error = athn_usb_load_firmware(usc);
 	if (error != 0) {
@@ -559,53 +626,69 @@ athn_usb_attachhook(device_t self)
 	}
 
 	/* We're now ready to attach the bus agnostic driver. */
+	sc->sc_key_delete = athn_usb_delete_key;
+	sc->sc_key_set = athn_usb_set_key;
+
 	error = athn_attach(sc);
 	if (error != 0) {
 		printf("returning from the athn_attach...\n");
 		return (ENXIO);
 	}
 	printf("=============================================== DONT FORGET TO DO THIS\n");
-#if 0
 	usc->sc_athn_attached = 1;
 	/* Override some operations for USB. */
-	ifp->if_ioctl = athn_usb_ioctl;
-	ifp->if_start = athn_usb_start;
-	ifp->if_watchdog = athn_usb_watchdog;
+	printf("Not running ifp\n");
+
+
+	// Attach VAP-specific "stuff"
+	ic->ic_vap_create = athn_usb_vap_create;
+	ic->ic_vap_delete = athn_usb_vap_delete; // Not finished
+//	ifp->if_ioctl = athn_usb_ioctl;
+//	ifp->if_start = athn_usb_start;
+//	ifp->if_watchdog = athn_usb_watchdog;
 	ic->ic_node_alloc = athn_usb_node_alloc;
-	ic->ic_newauth = athn_usb_newauth;
+	printf("Figure out what to do with newauth\n");
+//	ic->ic_newauth = athn_usb_newauth;
 	ic->ic_newassoc = athn_usb_newassoc;
 #ifndef IEEE80211_STA_ONLY
-	usc->sc_node_free = ic->ic_node_free;
-	ic->ic_node_free = athn_usb_node_free;
+//	usc->sc_node_free = ic->ic_node_free;		// No OpenBSD equivalent?
+//	ic->ic_node_free = athn_usb_node_free;		// No OpenBSD equivalent?
 #endif
-	ic->ic_updateslot = athn_usb_updateslot;
-	ic->ic_updateedca = athn_usb_updateedca;
-	ic->ic_set_key = athn_usb_set_key;
-	ic->ic_delete_key = athn_usb_delete_key;
+//	ic->ic_updateslot = athn_usb_updateslot;	
+//	ic->ic_updateedca = athn_usb_updateedca;
+
+
+
+//	vp->vp_set_key = athn_usb_set_key;
+//	vp->vp_delete_key = athn_usb_delete_key;	// For VAP
+//	ic->ic_set_key = athn_usb_set_key;			// For VAP
+//	ic->ic_delete_key = athn_usb_delete_key;	// For VAP
 #ifdef notyet
-	ic->ic_ampdu_tx_start = athn_usb_ampdu_tx_start;
-	ic->ic_ampdu_tx_stop = athn_usb_ampdu_tx_stop;
+	ic->ic_ampdu_tx_start = athn_usb_ampdu_tx_start;	// For VAP
+	ic->ic_ampdu_tx_stop = athn_usb_ampdu_tx_stop;		// For VAP
 #endif
-	ic->ic_newstate = athn_usb_newstate;
+//	ic->ic_newstate = athn_usb_newstate;
+#if 0
 	ic->ic_media.ifm_change = athn_usb_media_change;
 	timeout_set(&sc->scan_to, athn_usb_next_scan, usc);
 
 	ops->rx_enable = athn_usb_rx_enable;
-	splx(s);
+#endif
 
 	/* Reset HW key cache entries. */
+	int i; // XXX In the future move this integer back up
 	for (i = 0; i < sc->kc_entries; i++)
 		athn_reset_key(sc, i);
 
+#if 0
 	ops->enable_antenna_diversity(sc);
+#endif
 
 #ifdef ATHN_BT_COEXISTENCE
 	/* Configure bluetooth coexistence for combo chips. */
 	if (sc->flags & ATHN_FLAG_BTCOEX)
 		athn_btcoex_init(sc);
 #endif
-
-#endif // End of the FreeBSD stuff
 	/* Configure LED. */
 	athn_led_init(sc);
 
@@ -1695,12 +1778,12 @@ athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 }
 
 void
-athn_usb_newassoc(struct ieee80211com *ic, struct ieee80211_node *ni,
-    int isnew)
+athn_usb_newassoc(struct ieee80211_node *ni, int isnew)
 {
-	printf("%s unimplemented.\n", __func__);
+	printf("%s unimplemented...\n", __func__);
 #if 0
-#ifndef IEEE80211_STA_ONLY
+	printf("%s unimplemented.\n", __func__);
+//#ifndef IEEE80211_STA_ONLY
 	struct athn_usb_softc *usc = ic->ic_softc;
 
 	if (ic->ic_opmode != IEEE80211_M_HOSTAP &&
@@ -1710,7 +1793,6 @@ athn_usb_newassoc(struct ieee80211com *ic, struct ieee80211_node *ni,
 	/* Update the node's supported rates in a process context. */
 	ieee80211_ref_node(ni);
 	athn_usb_do_async(usc, athn_usb_newassoc_cb, &ni, sizeof(ni));
-#endif
 #endif
 }
 
@@ -1739,16 +1821,16 @@ athn_usb_newassoc_cb(struct athn_usb_softc *usc, void *arg)
 #endif
 
 struct ieee80211_node *
-athn_usb_node_alloc(struct ieee80211com *ic)
+athn_usb_node_alloc(struct ieee80211vap *vap, const uint8_t mac[IEEE80211_ADDR_LEN])
 {
-	printf("%s unimplemented.\n", __func__);
-	return NULL;
-#if 0
+//	printf("%s unimplemented.\n", __func__);
+//	return NULL;
+//#if 0
 	struct athn_node *an;
 
-	an = malloc(sizeof(struct athn_node), M_USBDEV, M_NOWAIT | M_ZERO);
+	an = malloc(sizeof(struct athn_node), M_80211_NODE, M_NOWAIT | M_ZERO);
 	return (struct ieee80211_node *)an;
-#endif
+//#endif
 }
 
 
@@ -2265,8 +2347,7 @@ athn_usb_updateslot_cb(struct athn_usb_softc *usc, void *arg)
 }
 
 int
-athn_usb_set_key(struct ieee80211com *ic, struct ieee80211_node *ni,
-    struct ieee80211_key *k)
+athn_usb_set_key(struct ieee80211vap *vap, const struct ieee80211_key *k)
 {
 	printf("%s unimplemented.\n", __func__);
 	return 0;
@@ -2314,11 +2395,11 @@ athn_usb_set_key_cb(struct athn_usb_softc *usc, void *arg)
 #endif
 }
 
-void
-athn_usb_delete_key(struct ieee80211com *ic, struct ieee80211_node *ni,
-    struct ieee80211_key *k)
+int
+athn_usb_delete_key(struct ieee80211vap *vap, const struct ieee80211_key *k)
 {
 	printf("%s unimplemented.\n", __func__);
+	return 0;
 #if 0
 	struct athn_usb_softc *usc = ic->ic_softc;
 	struct athn_usb_cmd_key cmd;
