@@ -1,6 +1,7 @@
 /*	$OpenBSD: athnvar.h,v 1.42 2021/04/15 18:25:43 stsp Exp $	*/
 
 /*-
+ * Copyright (c) 2022 Farhan Khan <farhan@farhan.codes>
  * Copyright (c) 2009 Damien Bergamini <damien.bergamini@free.fr>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -315,10 +316,10 @@ static const uint16_t ar_mcs_ndbps[][2] = {
 #define ATHN_NUM_RATES		(ATHN_NUM_LEGACY_RATES + ATHN_NUM_MCS)
 struct athn_node {
 	struct ieee80211_node		ni;
-	#if 0
+#if 0
 	struct ieee80211_amrr_node	amn;
 	struct ieee80211_ra_node	rn;
-	#endif
+#endif
 	uint8_t				ridx[ATHN_NUM_RATES];
 	uint8_t				fallback[ATHN_NUM_RATES];
 	uint8_t				sta_index;
@@ -625,6 +626,9 @@ struct athn_softc {
 	uint8_t			cmdq_first;
 	uint8_t			cmdq_last;
 
+	int				(*sc_key_delete)(struct ieee80211vap *, const struct ieee80211_key *);
+	int				(*sc_key_set)(struct ieee80211vap *, const struct ieee80211_key *);
+
 	/* Firmware-specific */
 	const char		*fwname;
 	uint16_t		fwver;
@@ -647,5 +651,8 @@ struct athn_vap {
 	struct ieee80211vap vap;
 	int		(*newstate)(struct ieee80211vap *, enum ieee80211_state, int);
 };
+
+int		athn_newstate(struct ieee80211vap *, enum ieee80211_state,
+	int);
 
 #endif /* ATHNVAR_H */
