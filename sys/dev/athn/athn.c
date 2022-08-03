@@ -163,8 +163,9 @@ void		athn_start(struct ifnet *);
 void		athn_watchdog(struct ifnet *);
 void		athn_set_multi(struct athn_softc *);
 int		athn_ioctl(struct ifnet *, u_long, caddr_t);
-int		athn_init(struct ifnet *);
-void		athn_stop(struct ifnet *, int);
+static void athn_parent(struct ieee80211com *);
+int		athn_init(struct athn_softc *);
+void		athn_stop(void *arg);
 void		athn_init_tx_queues(struct athn_softc *);
 int32_t		athn_ani_get_rssi(struct athn_softc *);
 void		athn_ani_ofdm_err_trigger(struct athn_softc *);
@@ -479,7 +480,9 @@ athn_attach(struct athn_softc *sc)
 	ic->ic_set_channel = athn_set_chan;
 	/*
 	ic->ic_transmit = ??
-	ic->ic_parent = ??
+	*/
+	ic->ic_parent = athn_parent;
+			/*
 	*/
 //	ic->ic_vap_create = athn_vap_create;
 //	ic->ic_vap_delete = athn_vap_delete; // Not finished
@@ -2883,6 +2886,7 @@ athn_next_scan(void *arg)
 int
 athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 {
+	printf("------------------------WHY IS THIS BREAKING!!!!\n");
 	printf("Not Finished: %s\n", __func__);
 	//struct ifnet *ifp = &ic->ic_if;
 	struct ieee80211com *ic = vap->iv_ic;
@@ -3344,7 +3348,7 @@ athn_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 }
 
 int
-athn_init(struct ifnet *ifp)
+athn_init(struct athn_softc *sc)
 {
 	printf("%s unimplemented...\n", __func__);
 	return 0;
@@ -3442,7 +3446,8 @@ athn_init(struct ifnet *ifp)
 }
 
 void
-athn_stop(struct ifnet *ifp, int disable)
+athn_stop(void *arg)
+//		struct ifnet *ifp, int disable)
 {
 	printf("%s unimplemented...\n", __func__);
 #if 0
@@ -3503,6 +3508,30 @@ athn_stop(struct ifnet *ifp, int disable)
 		sc->sc_disable(sc);
 #endif
 }
+
+static void
+athn_parent(struct ieee80211com *ic)
+{
+	struct athn_softc *sc = ic->ic_softc;
+//	int startall = 0;
+
+	ATHN_LOCK(sc);
+	ATHN_UNLOCK(sc);
+	// Some sort of detatched thingy
+//	if (sc->sc_
+
+	if (ic->ic_nrunning > 0) {
+		printf("Top condition\n");
+		if (sc->sc_init(sc) == 0)
+//		if (athn_usb_init(sc) == 0)
+			ieee80211_start_all(ic);
+		else
+			ieee80211_stop_all(ic);
+	} else {
+		athn_stop(sc);
+	}
+}
+
 
 void
 athn_suspend(struct athn_softc *sc)
