@@ -423,7 +423,7 @@ struct ar_rx_status {
 #define ATHN_USB_TXCMDSZ	512
 
 #define ATHN_USB_TX_TIMEOUT	5000	/* ms */
-#define ATHN_USB_CMD_TIMEOUT	1000	/* ms */
+#define ATHN_USB_CMD_TIMEOUT	500	/* ms */ // Originally 1000
 
 struct athn_usb_rx_stream {
 	struct mbuf	*m;
