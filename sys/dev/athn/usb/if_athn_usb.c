@@ -186,7 +186,7 @@ void		athn_usb_start(struct ifnet *);
 void		athn_usb_watchdog(struct ifnet *);
 int		athn_usb_ioctl(struct ieee80211com *, u_long, void *);
 int		athn_usb_init(struct athn_softc *);
-static int		athn_usb_stop(device_t);
+static int		athn_usb_stop(struct athn_usb_softc *);
 void		ar9271_load_ani(struct athn_softc *);
 int		ar5008_ccmp_decap(struct athn_softc *, struct mbuf *,
 		    struct ieee80211_node *);
@@ -802,6 +802,7 @@ athn_usb_open_pipes(struct athn_usb_softc *usc, device_t dev)
 void
 athn_usb_close_pipes(struct athn_usb_softc *usc)
 {
+	printf("Unimplemented: %s:%d\n", __func__, __LINE__);
 #if 0
 	if (usc->tx_data_pipe != NULL) {
 		usbd_close_pipe(usc->tx_data_pipe);
@@ -829,6 +830,7 @@ athn_usb_close_pipes(struct athn_usb_softc *usc)
 int
 athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 {
+	printf("Unimplemented: %s:%d\n", __func__, __LINE__);
 	return 0;
 #if 0
 	struct athn_usb_rx_data *data;
@@ -863,6 +865,7 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 void
 athn_usb_free_rx_list(struct athn_usb_softc *usc)
 {
+	printf("Unimplemented: %s:%d\n", __func__, __LINE__);
 #if 0
 	int i;
 
@@ -3309,19 +3312,19 @@ int
 athn_usb_init(struct athn_softc *sc)
 {
 	printf("%s unimplemented.\n", __func__);
-	return 0;
-#if 0
 //	struct athn_softc *sc = ifp->if_softc;
+//	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	struct athn_ops *ops = &sc->ops;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_channel *c, *extc;
-	struct athn_usb_rx_data *data;
+//	struct athn_usb_rx_data *data;
 	struct ar_htc_target_vif hvif;
 	struct ar_htc_target_sta sta;
 	struct ar_htc_cap_target hic;
 	uint16_t mode;
-	int i, error;
+	//int i, error;
+	int error;
 
 	/* Init host async commands ring. */
 	usc->cmdq.cur = usc->cmdq.next = usc->cmdq.queued = 0;
@@ -3337,11 +3340,14 @@ athn_usb_init(struct athn_softc *sc)
 	usc->tx_bcn = TAILQ_FIRST(&usc->tx_free_list);
 	TAILQ_REMOVE(&usc->tx_free_list, usc->tx_bcn, next);
 
-	c = ic->ic_bss->ni_chan = ic->ic_ibss_chan;
+	//c = ic->ic_bss->ni_chan = ic->ic_ibss_chan;
+//	c = ic->iv_bss->ni_chan = ic->ic_bsschan;
+	printf("temporarily cutting out iv_bss->ni_chan, DEFINITELY do not ignore this\n");
+	c = ic->ic_bsschan;
 	extc = NULL;
 
 	/* In case a new MAC address has been configured. */
-	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
+//	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
 
 	error = athn_set_power_awake(sc);
 	if (error != 0)
@@ -3377,7 +3383,7 @@ athn_usb_init(struct athn_softc *sc)
 	/* Create main interface on target. */
 	memset(&hvif, 0, sizeof(hvif));
 	hvif.index = 0;
-	IEEE80211_ADDR_COPY(hvif.myaddr, ic->ic_myaddr);
+	IEEE80211_ADDR_COPY(hvif.myaddr, ic->ic_macaddr);
 	switch (ic->ic_opmode) {
 	case IEEE80211_M_STA:
 		hvif.opmode = htobe32(AR_HTC_M_STA);
@@ -3395,9 +3401,11 @@ athn_usb_init(struct athn_softc *sc)
 	case IEEE80211_M_HOSTAP:
 		hvif.opmode = htobe32(AR_HTC_M_HOSTAP);
 		break;
+	default:
+		goto fail;
 #endif
 	}
-	hvif.rtsthreshold = htobe16(ic->ic_rtsthreshold);
+//	hvif.rtsthreshold = htobe16(ic->ic_rtsthreshold);
 	DPRINTF(("creating VAP\n"));
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_VAP_CREATE,
 	    &hvif, sizeof(hvif), NULL);
@@ -3406,7 +3414,7 @@ athn_usb_init(struct athn_softc *sc)
 
 	/* Create a fake node to send management frames before assoc. */
 	memset(&sta, 0, sizeof(sta));
-	IEEE80211_ADDR_COPY(sta.macaddr, ic->ic_myaddr);
+	IEEE80211_ADDR_COPY(sta.macaddr, ic->ic_macaddr);
 	sta.sta_index = 0;
 	sta.is_vif_sta = 1;
 	sta.vif_index = hvif.index;
@@ -3429,6 +3437,8 @@ athn_usb_init(struct athn_softc *sc)
 	if (error != 0)
 		goto fail;
 
+	return 0; // Get out of jail early card
+#if 0
 	/* Queue Rx xfers. */
 	for (i = 0; i < ATHN_USB_RX_LIST_COUNT; i++) {
 		data = &usc->rx_data[i];
@@ -3455,40 +3465,55 @@ athn_usb_init(struct athn_softc *sc)
 		ieee80211_new_state(ic, IEEE80211_S_RUN, -1);
 	else
 		ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
+#endif
 	athn_usb_wait_async(usc);
 	return (0);
  fail:
-	athn_usb_stop(ifp);
+	printf("athn_usb_stop not working cuz you know...\n");
+//	athn_usb_stop(ifp);
 	return (error);
-#endif
 }
 
 static int
-athn_usb_stop(device_t self)
+athn_usb_suspend(device_t self)
+{
+	int error;
+	struct athn_usb_softc *usc = device_get_softc(self);
+	// Transparent handler
+	error = athn_usb_stop(usc);
+
+	return (error);
+}
+
+
+static int
+athn_usb_stop(struct athn_usb_softc *usc)
 {
 	printf("%s unimplemented.\n", __func__);
-	return 0;
-#if 0
-	struct athn_softc *sc = ifp->if_softc;
-	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
+	struct athn_softc *sc = &usc->sc_sc;
+//	struct athn_softc *sc = ifp->if_softc;
+//	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ar_htc_target_vif hvif;
 	uint8_t sta_index;
-	int s;
+//	int s;
 
+	printf("This needs to be fixed!\n");
+	/*
 	sc->sc_tx_timer = 0;
 	ifp->if_timer = 0;
 	ifp->if_flags &= ~IFF_RUNNING;
 	ifq_clr_oactive(&ifp->if_snd);
+	*/
 
-	s = splusb();
-	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
+//	s = splusb();
+//	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
 
 	/* Wait for all async commands to complete. */
 	athn_usb_wait_async(usc);
 
-	timeout_del(&sc->scan_to);
-	timeout_del(&sc->calib_to);
+	callout_stop(&sc->scan_to);
+	callout_stop(&sc->calib_to);
 
 	/* Remove all non-default nodes. */
 	for (sta_index = 1; sta_index < AR_USB_MAX_STA; sta_index++) {
@@ -3501,7 +3526,7 @@ athn_usb_stop(device_t self)
 	/* Remove main interface. This also invalidates our default node. */
 	memset(&hvif, 0, sizeof(hvif));
 	hvif.index = 0;
-	IEEE80211_ADDR_COPY(hvif.myaddr, ic->ic_myaddr);
+	IEEE80211_ADDR_COPY(hvif.myaddr, ic->ic_macaddr);
 	(void)athn_usb_wmi_xcmd(usc, AR_WMI_CMD_VAP_REMOVE,
 	    &hvif, sizeof(hvif), NULL);
 
@@ -3519,19 +3544,21 @@ athn_usb_stop(device_t self)
 	athn_set_power_sleep(sc);
 
 	/* Abort Tx/Rx. */
-	usbd_abort_pipe(usc->tx_data_pipe);
-	usbd_abort_pipe(usc->rx_data_pipe);
+//	usbd_abort_pipe(usc->tx_data_pipe);
+//	usbd_abort_pipe(usc->rx_data_pipe);
+	usbd_transfer_stop(usc->usc_xfer[ATHN_TX_DATA]);
+	usbd_transfer_stop(usc->usc_xfer[ATHN_RX_DATA]);
 
 	/* Free Tx/Rx buffers. */
 	athn_usb_free_tx_list(usc);
 	athn_usb_free_rx_list(usc);
-	splx(s);
 
 	/* Flush Rx stream. */
 	m_freem(usc->rx_stream.m);
 	usc->rx_stream.m = NULL;
 	usc->rx_stream.left = 0;
-#endif
+
+	return 0; // Do error checking elsewhere?
 }
 
 
@@ -3542,7 +3569,7 @@ static device_method_t athn_usb_methods[] = {
 	DEVMETHOD(device_probe,		athn_usb_match),
 	DEVMETHOD(device_attach,	athn_usb_attach),
 	DEVMETHOD(device_detach,	athn_usb_detach),
-	DEVMETHOD(device_suspend,	athn_usb_stop),
+	DEVMETHOD(device_suspend,	athn_usb_suspend),
 	DEVMETHOD(device_resume,	athn_usb_resume),
 
 	DEVMETHOD_END

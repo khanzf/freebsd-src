@@ -2909,6 +2909,7 @@ athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		error = athn_switch_chan(sc, vap->iv_bss->ni_chan, NULL);
 		if (error != 0)
 			return (error);
+		printf("New state needs to fix scan_to time\n");
 		//timeout_add_msec(&sc->scan_to, 200);
 		break;
 	case IEEE80211_S_AUTH:
