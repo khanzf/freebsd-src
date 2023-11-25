@@ -617,6 +617,8 @@ athn_usb_attachhook(device_t self)
 		return(ENXIO);
 	}
 
+//	printf("Intentional failure\n");
+//	return (ENXIO);
 	/* Setup the host transport communication interface. */
 	error = athn_usb_htc_setup(usc);
 	if (error != 0) {
@@ -639,7 +641,7 @@ athn_usb_attachhook(device_t self)
 	// Attach VAP-specific "stuff"
 	ic->ic_vap_create = athn_usb_vap_create;
 	ic->ic_vap_delete = athn_usb_vap_delete; // Not finished
-	ic->ic_ioctl = athn_usb_ioctl;
+//	ic->ic_ioctl = athn_usb_ioctl;
 //	ifp->if_start = athn_usb_start;
 //	ifp->if_watchdog = athn_usb_watchdog;
 	ic->ic_node_alloc = athn_usb_node_alloc;
@@ -830,9 +832,10 @@ athn_usb_close_pipes(struct athn_usb_softc *usc)
 int
 athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 {
+#if 0
 	printf("Unimplemented: %s:%d\n", __func__, __LINE__);
 	return 0;
-#if 0
+#else
 	struct athn_usb_rx_data *data;
 	int i, error = 0;
 
@@ -841,6 +844,10 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 
 		data->sc = usc;	/* Backpointer for callbacks. */
 
+		// XXX This seems to setup an auto-transfer to USB,
+		// but FreeBSD has a totally different model.
+		// I need to verify how this should be done.
+/*
 		data->xfer = usbd_alloc_xfer(usc->sc_udev);
 		if (data->xfer == NULL) {
 			printf("%s: could not allocate xfer\n",
@@ -848,10 +855,13 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 			error = ENOMEM;
 			break;
 		}
-		data->buf = usbd_alloc_buffer(data->xfer, ATHN_USB_RXBUFSZ);
+*/
+		data->buf = malloc(ATHN_USB_RXBUFSZ, M_USBDEV, M_NOWAIT);
+		// OpenBSD
+		//data->buf = usbd_alloc_buffer(data->xfer, ATHN_USB_RXBUFSZ);
 		if (data->buf == NULL) {
-			printf("%s: could not allocate xfer buffer\n",
-			    usc->usb_dev.dv_xname);
+			printf(": could not allocate xfer buffer\n"); //,
+//			    usc->usb_dev.dv_xname);
 			error = ENOMEM;
 			break;
 		}
@@ -881,8 +891,10 @@ athn_usb_free_rx_list(struct athn_usb_softc *usc)
 int
 athn_usb_alloc_tx_list(struct athn_usb_softc *usc)
 {
-	return 0;
 #if 0
+	printf("Tracing: %s:%d\n", __func__, __LINE__);
+	return 0;
+#else
 	struct athn_usb_tx_data *data;
 	int i, error = 0;
 
@@ -892,6 +904,10 @@ athn_usb_alloc_tx_list(struct athn_usb_softc *usc)
 
 		data->sc = usc;	/* Backpointer for callbacks. */
 
+		// XXX This seems to setup an auto-transfer to USB,
+		// but FreeBSD has a totally different model.
+		// I need to verify how this should be done.
+/*
 		data->xfer = usbd_alloc_xfer(usc->sc_udev);
 		if (data->xfer == NULL) {
 			printf("%s: could not allocate xfer\n",
@@ -899,10 +915,14 @@ athn_usb_alloc_tx_list(struct athn_usb_softc *usc)
 			error = ENOMEM;
 			break;
 		}
-		data->buf = usbd_alloc_buffer(data->xfer, ATHN_USB_TXBUFSZ);
+*/
+		data->buf = malloc(ATHN_USB_TXBUFSZ, M_USBDEV, M_NOWAIT);
+		// OpenBSD
+		//data->buf = usbd_alloc_buffer(data->xfer, ATHN_USB_TXBUFSZ);
 		if (data->buf == NULL) {
-			printf("%s: could not allocate xfer buffer\n",
-			    usc->usb_dev.dv_xname);
+			printf(": could not allocate xfer buffer\n");
+//			printf("%s: could not allocate xfer buffer\n",
+//			    usc->usb_dev.dv_xname);
 			error = ENOMEM;
 			break;
 		}
@@ -3337,8 +3357,11 @@ athn_usb_init(struct athn_softc *sc)
 	if (error != 0)
 		goto fail;
 	/* Steal one buffer for beacons. */
+	printf("Tracing: %s:%d\n", __func__, __LINE__);
 	usc->tx_bcn = TAILQ_FIRST(&usc->tx_free_list);
+	printf("Tracing: %s:%d\n", __func__, __LINE__);
 	TAILQ_REMOVE(&usc->tx_free_list, usc->tx_bcn, next);
+	printf("Tracing: %s:%d\n", __func__, __LINE__);
 
 	//c = ic->ic_bss->ni_chan = ic->ic_ibss_chan;
 //	c = ic->iv_bss->ni_chan = ic->ic_bsschan;
@@ -3581,9 +3604,9 @@ static driver_t athn_usb_driver = {
 	.size = sizeof(struct athn_usb_softc)
 };
 
-static devclass_t athn_usb_devclass;
+//static devclass_t athn_usb_devclass;
 
-DRIVER_MODULE(athn_usb, uhub, athn_usb_driver, athn_usb_devclass, NULL, NULL);
+DRIVER_MODULE(athn_usb, uhub, athn_usb_driver, NULL, NULL);
 MODULE_VERSION(athn_usb, 1);
 MODULE_DEPEND(athn_usb, usb, 1, 1, 1);
 MODULE_DEPEND(athn_usb, wlan, 1, 1, 1);
