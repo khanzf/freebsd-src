@@ -450,7 +450,6 @@ athn_usb_attach(device_t self)
 	sc->ops.write = athn_usb_write;
 	sc->ops.write_barrier = athn_usb_write_barrier;
 
-	/* I think OpenBSD's athn_init is for PCI only */
 	sc->sc_init = athn_usb_init;
 
 	athn_usb_attach_private(usc, USB_GET_DRIVER_INFO(uaa));
@@ -677,6 +676,7 @@ athn_usb_attachhook(device_t self)
 	for (i = 0; i < sc->kc_entries; i++)
 		athn_reset_key(sc, i);
 
+	printf("After athn_reset_key\n");
 #if 0
 	ops->enable_antenna_diversity(sc);
 #endif
@@ -685,12 +685,17 @@ athn_usb_attachhook(device_t self)
 	/* Configure bluetooth coexistence for combo chips. */
 	if (sc->flags & ATHN_FLAG_BTCOEX)
 		athn_btcoex_init(sc);
+
+	printf("after athn_btcoex_init\n");
 #endif
 	/* Configure LED. */
 	athn_led_init(sc);
+	printf("after led stuff\n");
 
 	if (bootverbose)
 		ieee80211_announce(ic);
+
+	printf("after ieee80211_announce\n");
 	return 0;
 }
 
@@ -1469,11 +1474,14 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	struct ar_wmi_cmd_hdr *wmi;
 	int error;
 
+	printf("DEBUG: athn_usb_wmi_xcmd cmd_id = %d\n", cmd_id);
+
 //	if (usbd_is_dying(usc->sc_udev))
 //		return ENXIO;
 
 //	s = splusb();
 	// REVISIT THIS CODE BELOW. WHY THE LOOP?!?!?!?
+#if 1 // Why is this here at all???
 	while (usc->wait_cmd_id) {
 		/*
 		 * The previous USB transfer is not done yet. We can't use
@@ -1482,7 +1490,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		 */
 		//tsleep(&usc->wait_cmd_id, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT);
 		ATHN_LOCK(sc);
-		printf("This one probably needs some sort of wakeup equivalent...\n");
+		printf("This one probably needs some sort of wakeup equivalent... %d\n", usc->wait_cmd_id);
 		msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT); /* Wait 1 second at most */
 		ATHN_UNLOCK(sc);
 //		tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmx",
@@ -1491,6 +1499,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 //			splx(s);
 //			return ENXIO;
 	}
+#endif
 //	splx(s);
 
 	htc = (struct ar_htc_frame_hdr *)data->buf;
@@ -1583,14 +1592,19 @@ athn_usb_read(struct athn_softc *sc, uint32_t addr)
 	uint32_t val;
 	int error;
 
+printf("DEBUG: athn_usb_read addr = %d\n", addr);
+
 	/* Flush pending writes for strict consistency. */
 	athn_usb_write_barrier(sc);
 
 	addr = htobe32(addr);
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_REG_READ,
 	    &addr, sizeof(addr), &val);
-	if (error != 0)
+	if (error != 0) {
+printf("DEBUG: athn_usb_read val = 0xdeadbeef\n");
 		return (0xdeadbeef);
+	}
+printf("DEBUG: athn_usb_read val = %d\n", val);
 	return (htobe32(val));
 }
 
@@ -1599,6 +1613,7 @@ athn_usb_write(struct athn_softc *sc, uint32_t addr, uint32_t val)
 {
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 
+printf("DEBUG: athn_usb_write, addr = %d, val = %d\n", addr, val);
 	usc->wbuf[usc->wcount].addr = htobe32(addr);
 	usc->wbuf[usc->wcount].val  = htobe32(val);
 	if (++usc->wcount == AR_MAX_WRITE_COUNT)
@@ -1610,6 +1625,7 @@ athn_usb_write_barrier(struct athn_softc *sc)
 {
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 
+printf("DEBUG: athn_usb_write_barrier\n");
 	if (usc->wcount == 0)
 		return;	/* Nothing to write. */
 
@@ -3365,9 +3381,15 @@ athn_usb_init(struct athn_softc *sc)
 
 	//c = ic->ic_bss->ni_chan = ic->ic_ibss_chan;
 //	c = ic->iv_bss->ni_chan = ic->ic_bsschan;
-	printf("temporarily cutting out iv_bss->ni_chan, DEFINITELY do not ignore this\n");
+
+
+//c = ic->ic_bss->ni_chan = ic->ic_ibss_chan;
+//2564    extc = NULL;
+
+	//c = ic->ic_bss->ni_chan = ic->ic_bsschan;
 	c = ic->ic_bsschan;
 	extc = NULL;
+	printf("temporarily cutting out iv_bss->ni_chan, DEFINITELY do not ignore this\n");
 
 	/* In case a new MAC address has been configured. */
 //	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
