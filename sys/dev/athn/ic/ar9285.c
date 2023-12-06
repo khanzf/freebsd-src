@@ -138,8 +138,6 @@ void	ar9280_spur_mitigate(struct athn_softc *, struct ieee80211_channel *,
 int
 ar9285_attach(struct athn_softc *sc)
 {
-//	printf("%s currently unimplemented...\n", __func__);
-//	return 0;
 	sc->eep_base = AR9285_EEP_START_LOC;
 	sc->eep_size = sizeof(struct ar9285_eeprom);
 	sc->ngpiopins = (sc->flags & ATHN_FLAG_USB) ? 16 : 12;
@@ -154,25 +152,23 @@ ar9285_attach(struct athn_softc *sc)
 	sc->ops.get_spur_chans = ar9285_get_spur_chans;
 //#if NATHN_USB > 0
 	if (AR_SREV_9271(sc)) {
-		printf("Goes into AR_RSEV_9271 conditionn, probably should...\n");
+		printf("Condition 1 %s:%s\n", __FILE__, __func__);
 		sc->cca_min_2g = AR9271_PHY_CCA_MIN_GOOD_VAL_2GHZ;
 		sc->cca_max_2g = AR9271_PHY_CCA_MAX_GOOD_VAL_2GHZ;
 	} else
 //#endif
 	{
-		printf("Goes into non-ARSEV09271 condition, should not.\n");
+		printf("Condition 2 %s:%s\n", __FILE__, __func__);
 		sc->cca_min_2g = AR9285_PHY_CCA_MIN_GOOD_VAL_2GHZ;
 		sc->cca_max_2g = AR9285_PHY_CCA_MAX_GOOD_VAL_2GHZ;
 	}
 //#if NATHN_USB > 0
 	if (AR_SREV_9271(sc)) {
-		printf("Should also go into this condition\n");
 		sc->ini = &ar9271_ini;
 	}
 	else {
 //#endif
 		sc->ini = &ar9285_1_2_ini;
-		printf("Should not go into this!!\n");
 	}
 	sc->serdes = &ar9280_2_0_serdes;
 
