@@ -204,10 +204,10 @@ ar5008_attach(struct athn_softc *sc)
 	else {
 		printf("pcie\n");
 		athn_config_pcie(sc);
+		printf("Exits PCIe condition\n");
 	}
 
 	/* Read entire ROM content in memory. */
-	printf("Going into ar5008_read_rom\n");
 	if ((error = ar5008_read_rom(sc)) != 0) {
 		device_printf(sc->sc_dev, "could not read ROM\n");
 		return (error);
@@ -245,9 +245,6 @@ ar5008_attach(struct athn_softc *sc)
 	}
 
 	IEEE80211_ADDR_COPY(ic->ic_macaddr, base->macAddr);
-	for(int w=0;w<8;w++)
-		printf("%02x ", ic->ic_macaddr[w]);
-	printf("\n");
 
 	/* Check if we have a hardware radio switch. */
 	if (base->rfSilent & AR_EEP_RFSILENT_ENABLED) {

@@ -66,6 +66,19 @@ __FBSDID("$FreeBSD$");
 #include <dev/athn/athnreg.h>
 #include <dev/athn/athnvar.h>
 
+int debug_knob = 0;
+
+#define DEBUG_PRINTF(format, ...) if (debug_knob == 1) { printf("DEBUG: " format, ##__VA_ARGS__);}
+/*
+void DEBUG_PRINTF(const char *format, ...) {
+	va_list args;
+	va_start(args format);
+	printf("DEBUG :");
+	vprintf(format, args);
+	va_end(args);
+}
+*/
+
 #ifdef ATHN_DEBUG
 int athn_debug = 0;
 #endif
@@ -206,7 +219,7 @@ struct cfdriver athn_cd = {
 void
 athn_config_ht(struct athn_softc *sc)
 {
-	printf("%s implementing\n", __func__);
+	DEBUG_PRINTF("%s implementing\n", __func__);
 	struct ieee80211com *ic = &sc->sc_ic;
 //	int i, ntxstreams, nrxstreams;
 	int ntxstreams, nrxstreams;
@@ -215,7 +228,7 @@ athn_config_ht(struct athn_softc *sc)
 		return;
 
 	/* Set HT capabilities. */
-	// XXX Guess based on OpenBSD's values 
+	// XXX Guess based on OpenBSD's values
 	ic->ic_htcaps = IEEE80211_HTCAP_SMPS_OFF;
 //	ic->ic_htcaps = (IEEE80211_HTCAP_SMPS_DIS <<
 //	    IEEE80211_HTCAP_SMPS_SHIFT);
@@ -227,7 +240,7 @@ athn_config_ht(struct athn_softc *sc)
 	ic->ic_htextcaps = 0;
 //	ic->ic_htxcaps = 0;
 #ifdef notyet
-	printf("not yet set\n");
+	DEBUG_PRINTF("not yet set\n");
 	if (AR_SREV_9271(sc) || AR_SREV_9287_10_OR_LATER(sc))
 		ic->ic_htcaps |= IEEE80211_HTCAP_SGI20;
 	if (AR_SREV_9380_10_OR_LATER(sc))
@@ -261,61 +274,68 @@ athn_config_ht(struct athn_softc *sc)
 int
 athn_attach(struct athn_softc *sc)
 {
-	printf("-- Comes to athn_attach! ----- \n");
+	DEBUG_PRINTF("-- Comes to athn_attach! ----- \n");
 	struct ieee80211com *ic = &sc->sc_ic;
 //	struct ifnet *ifp = &ic->ic_if;
 	int error;
 
 	/* Read hardware revision. */
-printf("DEBUG: Enters athn_get_chipid\n");
+debug_knob = 0;
+DEBUG_PRINTF("Enter athn_get_chipid\n");
 	athn_get_chipid(sc);
-printf("DEBUG: Exit athn_get_chipid\n");
+DEBUG_PRINTF("Exit athn_get_chipid\n");
 
+DEBUG_PRINTF("Enter athn_reset_power_on\n");
 	if ((error = athn_reset_power_on(sc)) != 0) {
 		device_printf(sc->sc_dev, "could not reset chip\n");
 		return (error);
 	}
+DEBUG_PRINTF("Exit athn_reset_power_on\n");
 
+DEBUG_PRINTF("Enter athn_power_awake\n");
 	if ((error = athn_set_power_awake(sc)) != 0) {
 		device_printf(sc->sc_dev, "could not wakeup chip\n");
 		return (error);
 	}
-	printf("mac_ver is 0%02x\n", sc->mac_rev);
+DEBUG_PRINTF("Exit athn_power_awake\n");
+
+DEBUG_PRINTF("mac_ver is 0%02x\n", sc->mac_rev);
+DEBUG_PRINTF("mac_ver is %d\n",    sc->mac_rev);
 
 	if (AR_SREV_5416(sc) || AR_SREV_9160(sc)) {
-printf("DEBUG: Enter ar5416_attach\n");
+DEBUG_PRINTF("Enter ar5416_attach\n");
 		error = ar5416_attach(sc);
-printf("DEBUG: Exit ar5416_attach\n");
+DEBUG_PRINTF("Exit ar5416_attach\n");
 	}
 	else if (AR_SREV_9280(sc)) {
-printf("DEBUG: Enter ar9280_attach\n");
+DEBUG_PRINTF("Enter ar9280_attach\n");
 		error = ar9280_attach(sc);
-printf("DEBUG: Exit ar9280_attach\n");
+DEBUG_PRINTF("Exit ar9280_attach\n");
 	}
 	else if (AR_SREV_9285(sc)) {
-printf("DEBUG: Enter ar9285_attach\n");
+DEBUG_PRINTF("Enter ar9285_attach TOPPER\n");
 		error = ar9285_attach(sc);
-printf("DEBUG: Exit ar9285_attach\n");
+DEBUG_PRINTF("Exit ar9285_attach TOPPER\n");
 	}
 //#if NATHN_USB > 0
 	else if (AR_SREV_9271(sc)) {
-printf("DEBUG: Enter ar9285_attach\n");
+DEBUG_PRINTF("Enter ar9285_attach BOTTOM\n");
 		error = ar9285_attach(sc);
-printf("DEBUG: Exit ar9285_attach\n");
+DEBUG_PRINTF("Exit ar9285_attach BOTTOM\n");
 	}
 //#endif
 	else if (AR_SREV_9287(sc)) {
-printf("DEBUG: Enter ar9287_attach\n");
+DEBUG_PRINTF("Enter ar9287_attach\n");
 		error = ar9287_attach(sc);
-printf("DEBUG: Exit ar9287_attach\n");
+DEBUG_PRINTF("Exit ar9287_attach\n");
 	}
 	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc)) {
-printf("DEBUG: Enter ar9380_attach\n");
+DEBUG_PRINTF("Enter ar9380_attach\n");
 		error = ar9380_attach(sc);
-printf("DEBUG: Exit ar9380_attach\n");
+DEBUG_PRINTF("Exit ar9380_attach\n");
 	}
 	else {
-		printf("Condition 7\n");
+		 DEBUG_PRINTF("Condition 7\n");
 		error = ENOTSUP;
 	}
 	if (error != 0) {
@@ -323,13 +343,14 @@ printf("DEBUG: Exit ar9380_attach\n");
 		return (error);
 	}
 
+debug_knob = 1;
 	/* We can put the chip in sleep state now. */
-printf("DEBUG: Enter athn_set_power_sleep\n");
+DEBUG_PRINTF("DEBUG: Enter athn_set_power_sleep\n");
 	athn_set_power_sleep(sc);
-printf("DEBUG: Exit athn_set_power_sleep\n");
+DEBUG_PRINTF("DEBUG: Exit athn_set_power_sleep\n");
 
 	if (!(sc->flags & ATHN_FLAG_USB)) {
-		printf("cobfused condition\n");
+		DEBUG_PRINTF("confused condition\n");
 #if 0
 		error = sc->ops.dma_alloc(sc);
 		if (error != 0) {
@@ -345,12 +366,9 @@ printf("DEBUG: Exit athn_set_power_sleep\n");
 
 	if (sc->flags & ATHN_FLAG_RFSILENT) {
 //		DPRINTF(("found RF switch connected to GPIO pin %d\n",
-		printf("found RF switch connected to GPIO pin %d\n",
-		    sc->rfsilent_pin);
 	}
-	printf("%d key cache entries\n", sc->kc_entries);
 	//DPRINTF(("%d key cache entries\n", sc->kc_entries));
-// FrewBSD 
+// FreeBSD does not care about this
 #if 0
 	/*
 	 * In HostAP mode, the number of STAs that we can handle is
@@ -431,9 +449,9 @@ printf("DEBUG: Exit athn_set_power_sleep\n");
 //	    IEEE80211_C_SHPREAMBLE |	/* Short preamble supported. */
 //	    IEEE80211_C_PMGT;		/* Power saving supported. */
 
-printf("DEBUG: Enter athn_config_ht\n");
+DEBUG_PRINTF("DEBUG: Enter athn_config_ht\n");
 	athn_config_ht(sc);
-printf("DEBUG: Exit athn_config_ht\n");
+DEBUG_PRINTF("DEBUG: Exit athn_config_ht\n");
 
 	/* Set supported rates. */
 #if 0
@@ -456,16 +474,16 @@ printf("DEBUG: Exit athn_config_ht\n");
 	athn_get_chanlist(sc);
 
 	for(int i = 0;i<ic->ic_nchans;i++) {
-		printf("Chan: %d\tFlags: %0x02\n", i, ic->ic_channels[i].ic_flags);
+		DEBUG_PRINTF("Chan: %d\tFlags: %0x02\n", i, ic->ic_channels[i].ic_flags);
 		if (ic->ic_channels[i].ic_flags == 0) {
-			printf("Flags is 0\n");
+			DEBUG_PRINTF("Flags is 0\n");
 			ic->ic_channels[i].ic_flags = 0x0;
 		}
 	}
 
 	/* IBSS channel undefined for now. */
 	ic->ic_bsschan = &ic->ic_channels[0];
-	printf("Assigning ic->ic_bsschan here");
+	DEBUG_PRINTF("Assigning ic->ic_bsschan here");
 
 	// THIS IS HANDLED AT THE VAP LEVEL!
 	/*
@@ -478,8 +496,8 @@ printf("DEBUG: Exit athn_config_ht\n");
 //	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 
 //	if_attach(ifp);
-	printf("ieee80211_ifattach happens...\n");
-	printf("ic_nchans: %d\n", ic->ic_nchans);
+	DEBUG_PRINTF("ieee80211_ifattach happens...\n");
+	DEBUG_PRINTF("ic_nchans: %d\n", ic->ic_nchans);
 	ieee80211_ifattach(ic);
 
 	/*
@@ -503,20 +521,19 @@ printf("DEBUG: Exit athn_config_ht\n");
 	/*
 	ic->ic_wme.wme_update = ??
 	*/
-//	ic->ic_updateslot = athn_updateslot; 
+//	ic->ic_updateslot = athn_updateslot;
 	/*
 	ic->ic_update_promisc = ??
 	ic->ic_update_mcast = ??
 	*/
-//	ic->ic_node_alloc = athn_node_alloc; 
-//	ic->ic_newassoc = athn_newassoc; 
+//	ic->ic_node_alloc = athn_node_alloc;
+//	ic->ic_newassoc = athn_newassoc;
 	/*
 	sc->sc_node_free = ic->ic_node_free;
 	ic->ic_node_free = ??
 	*/
 
 	return 0;
-	//ieee80211_ifattach(ifp);
 #if 0
 	ic->ic_node_alloc = athn_node_alloc;
 	ic->ic_newassoc = athn_newassoc;
@@ -607,11 +624,11 @@ athn_get_chanlist(struct athn_softc *sc)
 			if (sc->flags & ATHN_FLAG_11N)
 				ic->ic_channels[chan].ic_flags |=
 				    IEEE80211_CHAN_HT;
-			printf("2g Chan: %d 0x%02x\n", chan, ic->ic_channels[chan].ic_flags); 
+			DEBUG_PRINTF("2g Chan: %d 0x%02x\n", chan, ic->ic_channels[chan].ic_flags);
 		}
 	}
 	if (sc->flags & ATHN_FLAG_11A) {
-		printf("Adding 5ghz channels...\n");
+		DEBUG_PRINTF("Adding 5ghz channels...\n");
 		ic->ic_nchans += nitems(athn_5ghz_chans);
 		for (i = 0; i < nitems(athn_5ghz_chans); i++) {
 			chan = athn_5ghz_chans[i];
@@ -621,11 +638,9 @@ athn_get_chanlist(struct athn_softc *sc)
 			if (sc->flags & ATHN_FLAG_11N)
 				ic->ic_channels[chan].ic_flags |=
 				    IEEE80211_CHAN_HT;
-			printf("5g Chan: %d 0x%02x\n", chan, ic->ic_channels[chan].ic_flags); 
+			DEBUG_PRINTF("5g Chan: %d 0x%02x\n", chan, ic->ic_channels[chan].ic_flags);
 		}
 	}
-
-//	ic->ic_nchans--;
 }
 
 void
@@ -727,10 +742,10 @@ void
 athn_get_chipid(struct athn_softc *sc)
 {
 	uint32_t reg;
-	printf("Starting athn_get_chipid\n");
+	DEBUG_PRINTF("Starting athn_get_chipid\n");
 
 	reg = AR_READ(sc, AR_SREV);
-	printf("Reg is %x %d\n", reg, reg);
+	DEBUG_PRINTF("Reg is %x %d\n", reg, reg);
 	if (MS(reg, AR_SREV_ID) == 0xff) {
 		sc->mac_ver = MS(reg, AR_SREV_VERSION2);
 		sc->mac_rev = MS(reg, AR_SREV_REVISION2);
@@ -743,10 +758,7 @@ athn_get_chipid(struct athn_softc *sc)
 			sc->flags |= ATHN_FLAG_PCIE;
 	}
 
-	printf("The mac ver is 0x%x\n", sc->mac_ver);
-	printf("The mac rev is 0x%x\n", sc->mac_rev);
-
-	printf("Exiting athn_get_chipid\n");
+	DEBUG_PRINTF("Exiting athn_get_chipid\n");
 }
 
 const char *
@@ -799,7 +811,7 @@ athn_get_rf_name(struct athn_softc *sc)
 int
 athn_reset_power_on(struct athn_softc *sc)
 {
-	printf("start of athn_reset_power_on\n");
+	DEBUG_PRINTF("start of athn_reset_power_on\n");
 	int ntries;
 
 	/* Set force wake. */
@@ -829,8 +841,8 @@ athn_reset_power_on(struct athn_softc *sc)
 		DPRINTF(("RTC not waking up\n"));
 		return (ETIMEDOUT);
 	}
-	printf("ntries was %d\n", ntries);
-	printf("end of athn_reset_power_on\n");
+	DEBUG_PRINTF("ntries was %d\n", ntries);
+	DEBUG_PRINTF("end of athn_reset_power_on\n");
 	return (athn_reset(sc, 0));
 }
 
@@ -874,28 +886,28 @@ athn_reset(struct athn_softc *sc, int cold)
 int
 athn_set_power_awake(struct athn_softc *sc)
 {
-printf("start of athn_set_power_awake\n");
+DEBUG_PRINTF("start of athn_set_power_awake\n");
 	int ntries, error;
 
-	printf("tracing: %s:%d\n", __func__, __LINE__);
+	DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 	/* Do a Power-On-Reset if shutdown. */
 	if ((AR_READ(sc, AR_RTC_STATUS) & AR_RTC_STATUS_M) ==
 	    AR_RTC_STATUS_SHUTDOWN) {
-		printf("tracing: %s:%d\n", __func__, __LINE__);
+		DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 		if ((error = athn_reset_power_on(sc)) != 0) {
-			printf("tracing: %s:%d\n", __func__, __LINE__);
+			DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 			return (error);
 		}
 		if (!AR_SREV_9380_10_OR_LATER(sc)) {
-			printf("tracing: %s:%d\n", __func__, __LINE__);
+			DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 			athn_init_pll(sc, NULL);
 		}
 	}
-	printf("tracing: %s:%d\n", __func__, __LINE__);
+	DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 	AR_SETBITS(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN);
-	printf("tracing: %s:%d\n", __func__, __LINE__);
+	DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 	AR_WRITE_BARRIER(sc);
-	printf("tracing: %s:%d\n", __func__, __LINE__);
+	DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 	DELAY(50);	/* Give chip the chance to awake. */
 
 	/* Poll until RTC is ON. */
@@ -906,10 +918,10 @@ printf("start of athn_set_power_awake\n");
 			break;
 		}
 		DELAY(50);
-		printf("tracing: %s:%d\n", __func__, __LINE__);
+		DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 		AR_SETBITS(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN);
-		printf("tracing: %s:%d\n", __func__, __LINE__);
-printf("Times: %d\n", ntries);
+		DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
+DEBUG_PRINTF("Times: %d\n", ntries);
 	}
 	if (ntries == 4000) {
 		DPRINTF(("RTC not waking up\n"));
@@ -918,13 +930,14 @@ printf("Times: %d\n", ntries);
 
 	AR_CLRBITS(sc, AR_STA_ID1, AR_STA_ID1_PWR_SAV);
 	AR_WRITE_BARRIER(sc);
-printf("end of athn_set_power_awake\n");
+DEBUG_PRINTF("end of athn_set_power_awake\n");
 	return (0);
 }
 
 void
 athn_set_power_sleep(struct athn_softc *sc)
 {
+DEBUG_PRINTF("Enter athn_set_power_sleep!\n");
 	AR_SETBITS(sc, AR_STA_ID1, AR_STA_ID1_PWR_SAV);
 	/* Allow the MAC to go to sleep. */
 	AR_CLRBITS(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN);
@@ -937,6 +950,7 @@ athn_set_power_sleep(struct athn_softc *sc)
 	if (!AR_SREV_5416(sc) && !AR_SREV_9271(sc))
 		AR_CLRBITS(sc, AR_RTC_RESET, AR_RTC_RESET_EN);
 	AR_WRITE_BARRIER(sc);
+DEBUG_PRINTF("Exit athn_set_power_sleep!\n");
 }
 
 void
@@ -993,28 +1007,35 @@ athn_write_serdes(struct athn_softc *sc, const struct athn_serdes *serdes)
 	int i;
 
 	/* Write sequence to Serializer/Deserializer. */
-	for (i = 0; i < serdes->nvals; i++)
+	for (i = 0; i < serdes->nvals; i++) {
+		DEBUG_PRINTF("athn_write_serdes %d %d\n", serdes->regs[i], serdes->vals[i]);
 		AR_WRITE(sc, serdes->regs[i], serdes->vals[i]);
+	}
 	AR_WRITE_BARRIER(sc);
 }
 
 void
 athn_config_pcie(struct athn_softc *sc)
 {
-	printf("%s not completed\n", __func__);
+	debug_knob = 1;
+	DEBUG_PRINTF("%s not completed\n", __func__);
 	/* Disable PLL when in L0s as well as receiver clock when in L1. */
 	athn_write_serdes(sc, sc->serdes);
 
+	printf("Is the pause here?\n");
 	DELAY(1000);
+	printf("After the pause\n");
 	/* Allow forcing of PCIe core into L1 state. */
+	printf("set bits 1\n");
 	AR_SETBITS(sc, AR_PCIE_PM_CTRL, AR_PCIE_PM_CTRL_ENA);
+	printf("set bits 2\n");
 
 #ifndef ATHN_PCIE_WAEN
 	AR_WRITE(sc, AR_WA, sc->workaround);
-	printf("Pre Processor 1\n");
+	DEBUG_PRINTF("Pre Processor 1\n");
 #else
 	AR_WRITE(sc, AR_WA, ATHN_PCIE_WAEN);
-	printf("Pre Processor 2\n");
+	DEBUG_PRINTF("Pre Processor 2\n");
 #endif
 	AR_WRITE_BARRIER(sc);
 }
@@ -1069,24 +1090,24 @@ athn_set_chan(struct ieee80211com *ic)
 	int error, qid;
 	struct ieee80211_channel *extc = NULL;
 
-	printf("Setting channel!\n");
+	DEBUG_PRINTF("Setting channel!\n");
 
 	/* Check that Tx is stopped, otherwise RF Bus grant will not work. */
 	for (qid = 0; qid < ATHN_QID_COUNT; qid++)
 		if (athn_tx_pending(sc, qid)) {
-			printf("EBUSY\n");
+			DEBUG_PRINTF("EBUSY\n");
 			return;
 			//return (EBUSY);
 		}
 
 	/* Request RF Bus grant. */
 	if ((error = ops->rf_bus_request(sc)) != 0) {
-		printf("Request RF Bus: error = %d\n", error);
+		DEBUG_PRINTF("Request RF Bus: error = %d\n", error);
 		return;
 //		return (error);
 	}
 
-	printf("Was ic->ic_curchan changed?\n");
+	DEBUG_PRINTF("Was ic->ic_curchan changed?\n");
 	ops->set_phy(sc, ic->ic_curchan, extc);
 
 	/* Change the synthesizer. */
@@ -1158,7 +1179,7 @@ athn_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 		goto reset;
 
 	athn_set_chan(ic);
-	printf("Need to figure out if an error here occurs...\n");
+	DEBUG_PRINTF("Need to figure out if an error here occurs...\n");
 	athn_rx_start(sc);
 
 	/* Re-enable interrupts. */
@@ -1169,7 +1190,7 @@ reset:		/* Error found, try a full reset. */
 	DPRINTFN(3, ("needs a full reset\n"));
 	error = athn_hw_reset(sc, c, extc, 0);
 	if (error != 0)	{ /* Hopeless case. */
-		printf("Channel error occurs %d\n", error);
+		DEBUG_PRINTF("Channel error occurs %d\n", error);
 		return (error);
 	}
 
@@ -1212,25 +1233,33 @@ athn_reset_key(struct athn_softc *sc, int entry)
 	 * the temporary register and writes the result to key cache memory.
 	 * The actual written memory area is 50 bits wide.
 	 */
-printf("Reset key 1\n");
+DEBUG_PRINTF("Reset key 1\n");
 	AR_WRITE(sc, AR_KEYTABLE_KEY0(entry), 0);
+DEBUG_PRINTF("AR_KEYTABLE_KEY0 = %d\n", AR_KEYTABLE_KEY0(entry));
 	AR_WRITE(sc, AR_KEYTABLE_KEY1(entry), 0);
+DEBUG_PRINTF("AR_KEYTABLE_KEY1 = %d\n", AR_KEYTABLE_KEY1(entry));
 
-printf("Reset key 2\n");
+DEBUG_PRINTF("Reset key 2\n");
 	AR_WRITE(sc, AR_KEYTABLE_KEY2(entry), 0);
+DEBUG_PRINTF("AR_KEYTABLE_KEY2 = %d\n", AR_KEYTABLE_KEY2(entry));
 	AR_WRITE(sc, AR_KEYTABLE_KEY3(entry), 0);
+DEBUG_PRINTF("AR_KEYTABLE_KEY3 = %d\n", AR_KEYTABLE_KEY3(entry));
 
-printf("Reset key 3\n");
+DEBUG_PRINTF("Reset key 3\n");
 	AR_WRITE(sc, AR_KEYTABLE_KEY4(entry), 0);
+DEBUG_PRINTF("AR_KEYTABLE_KEY4 = %d\n", AR_KEYTABLE_KEY4(entry));
 	AR_WRITE(sc, AR_KEYTABLE_TYPE(entry), AR_KEYTABLE_TYPE_CLR);
+DEBUG_PRINTF("AR_KEYTABLE_TYPE %d %d\n", AR_KEYTABLE_TYPE(entry), AR_KEYTABLE_TYPE_CLR);
 
-printf("Reset key 4\n");
+DEBUG_PRINTF("Reset key 4\n");
 	AR_WRITE(sc, AR_KEYTABLE_MAC0(entry), 0);
+DEBUG_PRINTF("AR_KEYTABLE_MAC0 = %d\n", AR_KEYTABLE_MAC0(entry));
 	AR_WRITE(sc, AR_KEYTABLE_MAC1(entry), 0);
+DEBUG_PRINTF("AR_KEYTABLE_MAC1 = %d\n", AR_KEYTABLE_MAC1(entry));
 
-printf("Reset key 5\n");
+DEBUG_PRINTF("Reset key 5\n");
 	AR_WRITE_BARRIER(sc);
-printf("Reset key 6\n");
+DEBUG_PRINTF("Reset key 6\n");
 }
 
 int
@@ -1341,7 +1370,7 @@ athn_delete_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 void
 athn_led_init(struct athn_softc *sc)
 {
-	printf("athn_led_init\n");
+	DEBUG_PRINTF("athn_led_init\n");
 	struct athn_ops *ops = &sc->ops;
 
 	ops->gpio_config_output(sc, sc->led_pin, AR_GPIO_OUTPUT_MUX_AS_OUTPUT);
@@ -2933,31 +2962,31 @@ athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 
 	switch (nstate) {
 	case IEEE80211_S_INIT:
-		printf("Mode: IEEE80211_S_INIT\n");
+		DEBUG_PRINTF("Mode: IEEE80211_S_INIT\n");
 		athn_set_led(sc, 0);
 		break;
 	case IEEE80211_S_SCAN:
-		printf("Mode: IEEE80211_S_SCAN\n");
+		DEBUG_PRINTF("Mode: IEEE80211_S_SCAN\n");
 		/* Make the LED blink while scanning. */
 		athn_set_led(sc, !sc->led_state);
 		error = athn_switch_chan(sc, vap->iv_bss->ni_chan, NULL);
 		if (error != 0)
 			return (error);
-		printf("New state needs to fix scan_to time\n");
+		DEBUG_PRINTF("New state needs to fix scan_to time\n");
 		//timeout_add_msec(&sc->scan_to, 200);
 		break;
 	case IEEE80211_S_AUTH:
-		printf("Mode: IEEE80211_S_AUTH\n");
+		DEBUG_PRINTF("Mode: IEEE80211_S_AUTH\n");
 		athn_set_led(sc, 0);
 		error = athn_switch_chan(sc, vap->iv_bss->ni_chan, NULL);
 		if (error != 0)
 			return (error);
 		break;
 	case IEEE80211_S_ASSOC:
-		printf("Mode: IEEE80211_S_ASSOC\n");
+		DEBUG_PRINTF("Mode: IEEE80211_S_ASSOC\n");
 		break;
 	case IEEE80211_S_RUN:
-		printf("Mode: IEEE80211_S_RUN\n");
+		DEBUG_PRINTF("Mode: IEEE80211_S_RUN\n");
 		athn_set_led(sc, 1);
 //#ifndef IEEE80211_STA_ONLY
 		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
@@ -3013,7 +3042,7 @@ athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	case IEEE80211_S_CSA:
 	case IEEE80211_S_SLEEP:
 	default:
-		printf("default case\n");
+		DEBUG_PRINTF("default case\n");
 		break;
 	}
 
@@ -3548,21 +3577,21 @@ static void
 athn_parent(struct ieee80211com *ic)
 {
 	struct athn_softc *sc = ic->ic_softc;
-	printf("%s under implemented...\n", __func__);
+	DEBUG_PRINTF("%s under implemented...\n", __func__);
 //	int startall = 0;
 
 	// Some sort of detatched thingy
 //	if (sc->sc_
 
 	if (ic->ic_nrunning > 0) {
-		printf("Top condition\n");
+		DEBUG_PRINTF("Top condition\n");
 		if (sc->sc_init(sc) == 0) {
 //		if (athn_usb_init(sc) == 0)
-			printf("ieee80211_start_all\n");
+			DEBUG_PRINTF("ieee80211_start_all\n");
 			ieee80211_start_all(ic);
 		}
 		else {
-			printf("ieee80211_stop_all\n");
+			DEBUG_PRINTF("ieee80211_stop_all\n");
 			ieee80211_stop_all(ic);
 		}
 	} else {
