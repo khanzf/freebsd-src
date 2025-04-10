@@ -66,7 +66,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/athn/athnreg.h>
 #include <dev/athn/athnvar.h>
 
-int debug_knob = 0;
+int debug_knob = 1;
 
 #define DEBUG_PRINTF(format, ...) if (debug_knob == 1) { printf("DEBUG: " format, ##__VA_ARGS__);}
 /*
@@ -1371,12 +1371,14 @@ void
 athn_led_init(struct athn_softc *sc)
 {
 	DEBUG_PRINTF("athn_led_init\n");
+	printf("Adnan speaking 1\n");
 	struct athn_ops *ops = &sc->ops;
 
 	ops->gpio_config_output(sc, sc->led_pin, AR_GPIO_OUTPUT_MUX_AS_OUTPUT);
 	/* LED off, active low. */
 	athn_set_led(sc, 0);
 	athn_set_led(sc, 1); // Delete this, temporary addition
+	printf("Adnan speaking 2\n");
 }
 
 void
