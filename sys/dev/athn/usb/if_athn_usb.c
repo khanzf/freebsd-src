@@ -62,7 +62,7 @@ __FBSDID("$FreeBSD$");
 
 MALLOC_DEFINE(M_ATHN_USB, "athn_usb", "athn usb private state");
 
-int debug_knob = 0;
+int debug_knob = 1;
 #define DEBUG_PRINTF(format, ...) if (debug_knob == 1) { printf("DEBUG: " format, ##__VA_ARGS__);}
 
 #if 0
@@ -691,6 +691,7 @@ athn_usb_attachhook(device_t self)
 	DEBUG_PRINTF("after athn_btcoex_init\n");
 #endif
 	/* Configure LED. */
+	printf("Before led stuff\n");
 	athn_led_init(sc);
 	DEBUG_PRINTF("after led stuff\n");
 
@@ -1129,8 +1130,8 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	error = usbd_do_request(usc->sc_udev, &sc->sc_mtx, &req, NULL);
 //	usbd_transfer_start(RX_INTR); //////////////////////////////
 	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
-	int xxx = 10;
-	while (usbd_transfer_pending(usc->usc_xfer[ATHN_RX_INTR]) && xxx--) {
+	int retries = 10;
+	while (usbd_transfer_pending(usc->usc_xfer[ATHN_RX_INTR]) && retries--) {
 		ATHN_UNLOCK(sc);
 		pause("W", hz / 16);
 		ATHN_LOCK(sc);
@@ -3314,11 +3315,12 @@ athn_usb_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 		break;
 	default: {
 		struct ieee80211vap *vap;
-		struct ifnet *ifp;
+//		struct ifnet *ifp;
 		printf("default not implemented! cmd = %lu\n", cmd);
 		TAILQ_FOREACH(vap, &ic->ic_vaps, iv_next) {
-			ifp = vap->iv_ifp;
-			printf("ifp->if_xname: %s\n", ifp->if_xname);
+			printf("A VAP failed\n");
+//			ifp = vap->iv_ifp;
+//			printf("ifp->if_xname: %s\n", ic->ic_name);
 		}
 		error = ENOTTY;
 //		error = ieee80211_ioctl(ifp, cmd, data);
