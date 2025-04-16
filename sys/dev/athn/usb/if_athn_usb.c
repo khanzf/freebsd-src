@@ -495,9 +495,11 @@ athn_usb_detach(device_t self)
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
 
+	printf("Destroy!\n");
 	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
 	mtx_destroy(&sc->sc_mtx);
 	DEBUG_PRINTF("Destroy\n");
+	printf("End of athn_usb_detach\n");
 	return 0;
 #if 0
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)self;
@@ -655,8 +657,6 @@ athn_usb_attachhook(device_t self)
 //	ic->ic_updateslot = athn_usb_updateslot;	
 //	ic->ic_updateedca = athn_usb_updateedca;
 
-
-
 //	vp->vp_set_key = athn_usb_set_key;
 //	vp->vp_delete_key = athn_usb_delete_key;	// For VAP
 //	ic->ic_set_key = athn_usb_set_key;			// For VAP
@@ -691,14 +691,11 @@ athn_usb_attachhook(device_t self)
 	DEBUG_PRINTF("after athn_btcoex_init\n");
 #endif
 	/* Configure LED. */
-	printf("Before led stuff\n");
 	athn_led_init(sc);
-	DEBUG_PRINTF("after led stuff\n");
 
-	if (bootverbose)
+//	if (bootverbose)
 		ieee80211_announce(ic);
 
-	DEBUG_PRINTF("after ieee80211_announce\n");
 	return 0;
 }
 
@@ -847,6 +844,8 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 	struct athn_usb_rx_data *data;
 	int i, error = 0;
 
+	printf("athn_usb_alloc_rx_list start\n");
+
 	for (i = 0; i < ATHN_USB_RX_LIST_COUNT; i++) {
 		data = &usc->rx_data[i];
 
@@ -865,17 +864,16 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 		}
 */
 		data->buf = malloc(ATHN_USB_RXBUFSZ, M_USBDEV, M_NOWAIT);
-		// OpenBSD
-		//data->buf = usbd_alloc_buffer(data->xfer, ATHN_USB_RXBUFSZ);
 		if (data->buf == NULL) {
 			printf(": could not allocate xfer buffer\n"); //,
-//			    usc->usb_dev.dv_xname);
 			error = ENOMEM;
 			break;
 		}
 	}
-	if (error != 0)
+	if (error != 0) {
+		printf("athn_usb_free_rx_list prego\n");
 		athn_usb_free_rx_list(usc);
+	}
 	return (error);
 #endif
 }
@@ -3368,9 +3366,13 @@ athn_usb_init(struct athn_softc *sc)
 	error = athn_usb_alloc_rx_list(usc);
 	if (error != 0)
 		goto fail;
+	else
+		printf("not a phayl 1!\n");
 	error = athn_usb_alloc_tx_list(usc);
 	if (error != 0)
 		goto fail;
+	else
+		printf("not a phayl 2!\n");
 	/* Steal one buffer for beacons. */
 	DEBUG_PRINTF("Tracing: %s:%d\n", __func__, __LINE__);
 	usc->tx_bcn = TAILQ_FIRST(&usc->tx_free_list);
@@ -3378,15 +3380,8 @@ athn_usb_init(struct athn_softc *sc)
 	TAILQ_REMOVE(&usc->tx_free_list, usc->tx_bcn, next);
 	DEBUG_PRINTF("Tracing: %s:%d\n", __func__, __LINE__);
 
-	//c = ic->ic_bss->ni_chan = ic->ic_ibss_chan;
-//	c = ic->iv_bss->ni_chan = ic->ic_bsschan;
-
-
-//c = ic->ic_bss->ni_chan = ic->ic_ibss_chan;
-//2564    extc = NULL;
-
-	//c = ic->ic_bss->ni_chan = ic->ic_bsschan;
-	c = ic->ic_bsschan;
+//	c = ic->ic_bsschan;
+	c = ic->ic_curchan;
 	extc = NULL;
 	DEBUG_PRINTF("temporarily cutting out iv_bss->ni_chan, DEFINITELY do not ignore this\n");
 
@@ -3394,21 +3389,31 @@ athn_usb_init(struct athn_softc *sc)
 //	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
 
 	error = athn_set_power_awake(sc);
-	if (error != 0)
+	if (error != 0) {
+		printf("Power on failed 1\n");
 		goto fail;
+	}
 
 	error = athn_usb_wmi_cmd(usc, AR_WMI_CMD_FLUSH_RECV);
-	if (error != 0)
+	if (error != 0) {
+		printf("Power on failed 2\n");
 		goto fail;
+	}
 
 	error = athn_hw_reset(sc, c, extc, 1);
-	if (error != 0)
+	if (error != 0) {
+		printf("Power on failed 3\n");
 		goto fail;
+	}
 
+printf("earlybird\n");
+return 1;
 	ops->set_txpower(sc, c, extc);
 
 	mode = htobe16(IEEE80211_IS_CHAN_2GHZ(c) ?
 	    AR_HTC_MODE_11NG : AR_HTC_MODE_11NA);
+	// Hard-coding in AR_HTC_MODE_11NA
+	mode = AR_HTC_MODE_11NA;
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_SET_MODE,
 	    &mode, sizeof(mode), NULL);
 	if (error != 0)
