@@ -230,7 +230,6 @@ ar9285_swap_rom(struct athn_softc *sc)
 const struct ar_spur_chan *
 ar9285_get_spur_chans(struct athn_softc *sc, int is2ghz)
 {
-	printf("Unimplemented: %s\n", __func__);
 	const struct ar9285_eeprom *eep = sc->eep;
 
 	KASSERT(is2ghz, ("is2ghz assertion error"));
@@ -241,14 +240,13 @@ void
 ar9285_init_from_rom(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
-	printf("Unimplemented: %s\n", __func__);
-#if 0
 	const struct ar9285_eeprom *eep = sc->eep;
 	const struct ar9285_modal_eep_header *modal = &eep->modalHeader;
 	uint32_t reg, offset = 0x1000;
 	uint8_t ob[5], db1[5], db2[5];
 	uint8_t txRxAtten;
 
+	printf("Start of ar9285_init_from_rom\n");
 	AR_WRITE(sc, AR_PHY_SWITCH_COM, modal->antCtrlCommon);
 	AR_WRITE(sc, AR_PHY_SWITCH_CHAIN_0, modal->antCtrlChain);
 
@@ -367,7 +365,8 @@ ar9285_init_from_rom(struct athn_softc *sc, struct ieee80211_channel *c,
 		db2[0] = modal->db1_01;
 		db2[1] = db2[2] = db2[3] = db2[4] = db2[0];
 	}
-#if NATHN_USB > 0
+printf("Set a flag to only do this if USB\n");
+//#if NATHN_USB > 0
 	if (AR_SREV_9271(sc)) {
 		reg = AR_READ(sc, AR9285_AN_RF2G3);
 		reg = RW(reg, AR9271_AN_RF2G3_OB_CCK, ob [0]);
@@ -383,7 +382,7 @@ ar9285_init_from_rom(struct athn_softc *sc, struct ieee80211_channel *c,
 		AR_WRITE_BARRIER(sc);
 		DELAY(100);
 	} else
-#endif	/* ATHN_USB */
+//#endif	/* ATHN_USB */
 	{
 		reg = AR_READ(sc, AR9285_AN_RF2G3);
 		reg = RW(reg, AR9285_AN_RF2G3_OB_0,  ob [0]);
@@ -450,7 +449,7 @@ ar9285_init_from_rom(struct athn_softc *sc, struct ieee80211_channel *c,
 		AR_WRITE(sc, AR_PHY_SETTLING, reg);
 	}
 	AR_WRITE_BARRIER(sc);
-#endif
+	printf("End of ar9285_init_from_rom\n");
 }
 
 void

@@ -88,7 +88,7 @@ struct athn_tx_radiotap_header {
 	 1 << IEEE80211_RADIOTAP_CHANNEL)
 
 struct athn_tx_buf {
-	LIST_ENTRY(athn_tx_buf)	bf_list;
+//	LIST_ENTRY(athn_tx_buf)	bf_list;
 
 	void				*bf_descs;
 	bus_dmamap_t			bf_map;
@@ -103,14 +103,14 @@ struct athn_tx_buf {
 };
 
 struct athn_txq {
-	LIST_HEAD(, athn_tx_buf)	head;
+	STAILQ_HEAD(, athn_tx_buf)	head;
 	void				*lastds;
 	struct athn_tx_buf		*wait;
 	int				queued;
 };
 
 struct athn_rx_buf {
-	LIST_ENTRY(athn_rx_buf)	bf_list;
+	//LIST_ENTRY(athn_rx_buf)	bf_list;
 
 	void				*bf_desc;
 	bus_dmamap_t			bf_map;
@@ -130,7 +130,7 @@ struct athn_rxq {
 #endif
 	int				count;
 
-	LIST_HEAD(, athn_rx_buf)	head;
+	//LIST_HEAD(, athn_rx_buf)	head;
 };
 
 /* Software rate indexes. */
@@ -516,7 +516,9 @@ struct athn_softc {
 #define ATHN_CAL_ADC_DC		(1 << 2)
 #define ATHN_CAL_TEMP		(1 << 3)
 
-	struct ieee80211_channel	*curchan;
+	// There is now ic->ic_curchan
+//	struct ieee80211_channel	*curchan;
+	// Not sure about this
 	struct ieee80211_channel	*curchanext;
 
 	/* Open Loop Power Control. */
@@ -553,7 +555,7 @@ struct athn_softc {
 	bus_dmamap_t			map;
 	bus_dma_segment_t		seg;
 #endif
-	LIST_HEAD(, athn_tx_buf)	txbufs;
+	//LIST_HEAD(, athn_tx_buf)	txbufs;
 	struct athn_tx_buf		*bcnbuf;
 	struct athn_tx_buf		txpool[ATHN_NTXBUFS];
 
