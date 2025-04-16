@@ -30,6 +30,7 @@
 #include <sys/systm.h>
 #include <sys/malloc.h>
 #include <sys/queue.h>
+#include <sys/kernel.h>
 //#include <sys/timeout.h>
 #include <sys/conf.h>
 //#include <sys/device.h>
@@ -1900,9 +1901,9 @@ ar5008_tx(struct athn_softc *sc, struct mbuf *m, struct ieee80211_node *ni,
 void
 ar5008_set_rf_mode(struct athn_softc *sc, struct ieee80211_channel *c)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
 	uint32_t reg;
+
+	printf("Running ar5008_set_rf_mode %p %p\n", sc, c);
 
 	reg = IEEE80211_IS_CHAN_2GHZ(c) ?
 	    AR_PHY_MODE_DYNAMIC : AR_PHY_MODE_OFDM;
@@ -1915,7 +1916,8 @@ ar5008_set_rf_mode(struct athn_softc *sc, struct ieee80211_channel *c)
 	}
 	AR_WRITE(sc, AR_PHY_MODE, reg);
 	AR_WRITE_BARRIER(sc);
-#endif
+
+	printf("Returning ar5008_set_rf_mode\n");
 }
 
 static __inline uint32_t
@@ -1998,8 +2000,6 @@ void
 ar5008_set_delta_slope(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
 	uint32_t coeff, exp, man, reg;
 
 	/* Set Delta Slope (exponent and mantissa). */
@@ -2022,7 +2022,6 @@ ar5008_set_delta_slope(struct athn_softc *sc, struct ieee80211_channel *c,
 	reg = RW(reg, AR_PHY_HALFGI_DSC_MAN, man);
 	AR_WRITE(sc, AR_PHY_HALFGI, reg);
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 void
@@ -2615,8 +2614,6 @@ void
 ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
-	printf("%s unimplemented.\n", __func__);
-#if 0
 	struct athn_ops *ops = &sc->ops;
 	const struct athn_ini *ini = sc->ini;
 	const uint32_t *pvals;
@@ -2643,6 +2640,7 @@ ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
 		else
 			pvals = ini->vals_5g20;
 	}
+
 	DPRINTFN(4, ("writing modal init vals\n"));
 	for (i = 0; i < ini->nregs; i++) {
 		uint32_t val = pvals[i];
@@ -2672,6 +2670,9 @@ ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
 	}
 	AR_WRITE_BARRIER(sc);
 
+	printf("ar5008_hw_init working through...\n");
+	if (1)
+		return;
 	/* Second initialization step (common to all channels). */
 	DPRINTFN(4, ("writing common init vals\n"));
 	for (i = 0; i < ini->ncmregs; i++) {
@@ -2738,7 +2739,6 @@ ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
 	ar5008_init_chains(sc);
 
 	if (sc->flags & ATHN_FLAG_OLPC) {
-		extern int ticks;
 		sc->olpc_ticks = ticks;
 		ops->olpc_init(sc);
 	}
@@ -2747,7 +2747,6 @@ ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
 
 	if (!AR_SINGLE_CHIP(sc))
 		ar5416_rf_reset(sc, c);
-#endif
 }
 
 uint8_t
