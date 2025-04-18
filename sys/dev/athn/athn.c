@@ -1,4 +1,4 @@
-/*	$OpenBSD: athn.c,v 1.111 2021/04/15 18:25:43 stsp Exp $	*/
+
 
 /*-
  * Copyright (c) 2022 Farhan Khan <khanzf@gmail.com>
@@ -275,25 +275,19 @@ athn_config_ht(struct athn_softc *sc)
 int
 athn_attach(struct athn_softc *sc)
 {
-	DEBUG_PRINTF("-- Comes to athn_attach! ----- \n");
 	struct ieee80211com *ic = &sc->sc_ic;
 //	struct ifnet *ifp = &ic->ic_if;
 	int error;
 
 	/* Read hardware revision. */
 debug_knob = 0;
-DEBUG_PRINTF("Enter athn_get_chipid\n");
 	athn_get_chipid(sc);
-DEBUG_PRINTF("Exit athn_get_chipid\n");
 
-DEBUG_PRINTF("Enter athn_reset_power_on\n");
 	if ((error = athn_reset_power_on(sc)) != 0) {
 		device_printf(sc->sc_dev, "could not reset chip\n");
 		return (error);
 	}
-DEBUG_PRINTF("Exit athn_reset_power_on\n");
 
-DEBUG_PRINTF("Enter athn_power_awake\n");
 	if ((error = athn_set_power_awake(sc)) != 0) {
 		device_printf(sc->sc_dev, "could not wakeup chip\n");
 		return (error);
@@ -303,42 +297,23 @@ DEBUG_PRINTF("Exit athn_power_awake\n");
 DEBUG_PRINTF("mac_ver is 0%02x\n", sc->mac_rev);
 DEBUG_PRINTF("mac_ver is %d\n",    sc->mac_rev);
 
-	if (AR_SREV_5416(sc) || AR_SREV_9160(sc)) {
-DEBUG_PRINTF("Enter ar5416_attach\n");
+	if (AR_SREV_5416(sc) || AR_SREV_9160(sc))
 		error = ar5416_attach(sc);
-DEBUG_PRINTF("Exit ar5416_attach\n");
-	}
-	else if (AR_SREV_9280(sc)) {
-DEBUG_PRINTF("Enter ar9280_attach\n");
+	else if (AR_SREV_9280(sc))
 		error = ar9280_attach(sc);
-DEBUG_PRINTF("Exit ar9280_attach\n");
-	}
-	else if (AR_SREV_9285(sc)) {
-DEBUG_PRINTF("Enter ar9285_attach TOPPER\n");
+	else if (AR_SREV_9285(sc))
 		error = ar9285_attach(sc);
-DEBUG_PRINTF("Exit ar9285_attach TOPPER\n");
-	}
 //#if NATHN_USB > 0
-	else if (AR_SREV_9271(sc)) {
-DEBUG_PRINTF("Enter ar9285_attach BOTTOM\n");
+	else if (AR_SREV_9271(sc))
 		error = ar9285_attach(sc);
-DEBUG_PRINTF("Exit ar9285_attach BOTTOM\n");
-	}
 //#endif
-	else if (AR_SREV_9287(sc)) {
-DEBUG_PRINTF("Enter ar9287_attach\n");
+	else if (AR_SREV_9287(sc))
 		error = ar9287_attach(sc);
-DEBUG_PRINTF("Exit ar9287_attach\n");
-	}
-	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc)) {
-DEBUG_PRINTF("Enter ar9380_attach\n");
+	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc))
 		error = ar9380_attach(sc);
-DEBUG_PRINTF("Exit ar9380_attach\n");
-	}
-	else {
-		 DEBUG_PRINTF("Condition 7\n");
+	else
 		error = ENOTSUP;
-	}
+
 	if (error != 0) {
 		device_printf(sc->sc_dev, "could not attach chip\n");
 		return (error);
@@ -346,12 +321,9 @@ DEBUG_PRINTF("Exit ar9380_attach\n");
 
 debug_knob = 1;
 	/* We can put the chip in sleep state now. */
-DEBUG_PRINTF("DEBUG: Enter athn_set_power_sleep\n");
 	athn_set_power_sleep(sc);
-DEBUG_PRINTF("DEBUG: Exit athn_set_power_sleep\n");
 
 	if (!(sc->flags & ATHN_FLAG_USB)) {
-		DEBUG_PRINTF("confused condition\n");
 #if 0
 		error = sc->ops.dma_alloc(sc);
 		if (error != 0) {
@@ -450,9 +422,7 @@ DEBUG_PRINTF("DEBUG: Exit athn_set_power_sleep\n");
 //	    IEEE80211_C_SHPREAMBLE |	/* Short preamble supported. */
 //	    IEEE80211_C_PMGT;		/* Power saving supported. */
 
-DEBUG_PRINTF("DEBUG: Enter athn_config_ht\n");
 	athn_config_ht(sc);
-DEBUG_PRINTF("DEBUG: Exit athn_config_ht\n");
 
 	/* Set supported rates. */
 #if 0
@@ -472,19 +442,22 @@ DEBUG_PRINTF("DEBUG: Exit athn_config_ht\n");
 #endif // Not sure where the values above are set
 
 	/* Get the list of authorized/supported channels. */
+
+#if 0 // New way of setting channels
 	athn_get_chanlist(sc);
 
 	for(int i = 0;i<ic->ic_nchans;i++) {
-		DEBUG_PRINTF("Chan: %d\tFlags: %0x02\n", i, ic->ic_channels[i].ic_flags);
 		if (ic->ic_channels[i].ic_flags == 0) {
 			DEBUG_PRINTF("Flags is 0\n");
 			ic->ic_channels[i].ic_flags = 0x0;
 		}
 	}
+#endif
+
+	athn_getradiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans, ic->ic_channels);
 
 	/* IBSS channel undefined for now. */
 	ic->ic_bsschan = &ic->ic_channels[0];
-	DEBUG_PRINTF("Assigning ic->ic_bsschan here");
 
 	// THIS IS HANDLED AT THE VAP LEVEL!
 	/*
@@ -1009,7 +982,6 @@ athn_write_serdes(struct athn_softc *sc, const struct athn_serdes *serdes)
 
 	/* Write sequence to Serializer/Deserializer. */
 	for (i = 0; i < serdes->nvals; i++) {
-		DEBUG_PRINTF("athn_write_serdes %d %d\n", serdes->regs[i], serdes->vals[i]);
 		AR_WRITE(sc, serdes->regs[i], serdes->vals[i]);
 	}
 	AR_WRITE_BARRIER(sc);
@@ -1019,24 +991,21 @@ void
 athn_config_pcie(struct athn_softc *sc)
 {
 	debug_knob = 1;
-	DEBUG_PRINTF("%s not completed\n", __func__);
+	/*
+	 * XXX Note to self:
+    * Why is this happening? Using USB, not PCI. Check on the OpenBSD side
+	 */
 	/* Disable PLL when in L0s as well as receiver clock when in L1. */
 	athn_write_serdes(sc, sc->serdes);
 
-	printf("Is the pause here?\n");
 	DELAY(1000);
-	printf("After the pause\n");
 	/* Allow forcing of PCIe core into L1 state. */
-	printf("set bits 1\n");
 	AR_SETBITS(sc, AR_PCIE_PM_CTRL, AR_PCIE_PM_CTRL_ENA);
-	printf("set bits 2\n");
 
 #ifndef ATHN_PCIE_WAEN
 	AR_WRITE(sc, AR_WA, sc->workaround);
-	DEBUG_PRINTF("Pre Processor 1\n");
 #else
 	AR_WRITE(sc, AR_WA, ATHN_PCIE_WAEN);
-	DEBUG_PRINTF("Pre Processor 2\n");
 #endif
 	AR_WRITE_BARRIER(sc);
 }
@@ -1091,29 +1060,23 @@ athn_set_chan(struct ieee80211com *ic)
 	int error, qid;
 	struct ieee80211_channel *extc = NULL;
 
-	DEBUG_PRINTF("Setting channel!\n");
-
 	/* Check that Tx is stopped, otherwise RF Bus grant will not work. */
 	for (qid = 0; qid < ATHN_QID_COUNT; qid++)
 		if (athn_tx_pending(sc, qid)) {
-			DEBUG_PRINTF("EBUSY\n");
 			return;
 			//return (EBUSY);
 		}
 
 	/* Request RF Bus grant. */
 	if ((error = ops->rf_bus_request(sc)) != 0) {
-		DEBUG_PRINTF("Request RF Bus: error = %d\n", error);
 		return;
 //		return (error);
 	}
 
-	DEBUG_PRINTF("Was ic->ic_curchan changed?\n");
 	ops->set_phy(sc, ic->ic_curchan, extc);
 
 	/* Change the synthesizer. */
 	if ((error = ops->set_synth(sc, ic->ic_curchan, extc)) != 0) {
-		printf("Change the synthesizer: error = %d\n", error);
 		return;
 //		return (error);
 	}
@@ -1234,33 +1197,19 @@ athn_reset_key(struct athn_softc *sc, int entry)
 	 * the temporary register and writes the result to key cache memory.
 	 * The actual written memory area is 50 bits wide.
 	 */
-DEBUG_PRINTF("Reset key 1\n");
 	AR_WRITE(sc, AR_KEYTABLE_KEY0(entry), 0);
-DEBUG_PRINTF("AR_KEYTABLE_KEY0 = %d\n", AR_KEYTABLE_KEY0(entry));
 	AR_WRITE(sc, AR_KEYTABLE_KEY1(entry), 0);
-DEBUG_PRINTF("AR_KEYTABLE_KEY1 = %d\n", AR_KEYTABLE_KEY1(entry));
 
-DEBUG_PRINTF("Reset key 2\n");
 	AR_WRITE(sc, AR_KEYTABLE_KEY2(entry), 0);
-DEBUG_PRINTF("AR_KEYTABLE_KEY2 = %d\n", AR_KEYTABLE_KEY2(entry));
 	AR_WRITE(sc, AR_KEYTABLE_KEY3(entry), 0);
-DEBUG_PRINTF("AR_KEYTABLE_KEY3 = %d\n", AR_KEYTABLE_KEY3(entry));
 
-DEBUG_PRINTF("Reset key 3\n");
 	AR_WRITE(sc, AR_KEYTABLE_KEY4(entry), 0);
-DEBUG_PRINTF("AR_KEYTABLE_KEY4 = %d\n", AR_KEYTABLE_KEY4(entry));
 	AR_WRITE(sc, AR_KEYTABLE_TYPE(entry), AR_KEYTABLE_TYPE_CLR);
-DEBUG_PRINTF("AR_KEYTABLE_TYPE %d %d\n", AR_KEYTABLE_TYPE(entry), AR_KEYTABLE_TYPE_CLR);
 
-DEBUG_PRINTF("Reset key 4\n");
 	AR_WRITE(sc, AR_KEYTABLE_MAC0(entry), 0);
-DEBUG_PRINTF("AR_KEYTABLE_MAC0 = %d\n", AR_KEYTABLE_MAC0(entry));
 	AR_WRITE(sc, AR_KEYTABLE_MAC1(entry), 0);
-DEBUG_PRINTF("AR_KEYTABLE_MAC1 = %d\n", AR_KEYTABLE_MAC1(entry));
 
-DEBUG_PRINTF("Reset key 5\n");
 	AR_WRITE_BARRIER(sc);
-DEBUG_PRINTF("Reset key 6\n");
 }
 
 int
@@ -3638,6 +3587,8 @@ athn_getradiocaps(struct ieee80211com *ic,
 	memset(bands, 0, sizeof(bands));
 	setbit(bands, IEEE80211_MODE_11B);
 	setbit(bands, IEEE80211_MODE_11G);
+	setbit(bands, IEEE80211_MODE_11NA);
+	setbit(bands, IEEE80211_MODE_11NG);
 
 	ieee80211_add_channels_default_2ghz(chans, maxchans, nchans,
 		bands, 0); //(ic->ic_htcaps & IEEE80211_HTCAP, CHWIDTH40) ?
