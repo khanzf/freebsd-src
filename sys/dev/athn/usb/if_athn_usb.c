@@ -427,7 +427,6 @@ athn_usb_resume(device_t self)
 static int
 athn_usb_attach(device_t self)
 {
-	DEBUG_PRINTF("athn_usb_attach\n");
 	struct usb_attach_arg *uaa = device_get_ivars(self);
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
@@ -540,7 +539,6 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 //	struct athn_softc *sc = ic->ic_softc;
 	struct athn_vap *avp;
 	struct ieee80211vap *vap;
-	DEBUG_PRINTF("athn_usb_vap_create\n");
 //	struct ifnet *ifp;
 
 	/* From zyd and rsu, not sure if this applies to athn */
@@ -614,14 +612,11 @@ athn_usb_attachhook(device_t self)
 
 	/* Load firmware. */
 	debug_knob = 0;
-	printf("athn_usb_load_firmware Start\n");
 	error = athn_usb_load_firmware(usc);
 	if (error != 0) {
 		device_printf(sc->sc_dev, "could not load firmware\n");
 		return(ENXIO);
 	}
-
-	printf("athn_usb_load_firmware End\n");
 
 	/* Setup the host transport communication interface. */
 	error = athn_usb_htc_setup(usc);
@@ -635,7 +630,6 @@ athn_usb_attachhook(device_t self)
 
 	error = athn_attach(sc);
 	if (error != 0) {
-		DEBUG_PRINTF("returning from the athn_attach...\n");
 		return (ENXIO);
 	}
 	usc->sc_athn_attached = 1;
@@ -675,20 +669,16 @@ athn_usb_attachhook(device_t self)
 
 	/* Reset HW key cache entries. */
 	int i; // XXX In the future move this integer back up
-	printf("For debugging, setting sc->kc_entries to 10 from %d\n", sc->kc_entries);
 //	sc->kc_entries = 10;
 	for (i = 0; i < sc->kc_entries; i++)
 		athn_reset_key(sc, i);
 
-	DEBUG_PRINTF("After athn_reset_key\n");
 	ops->enable_antenna_diversity(sc);
 
 #ifdef ATHN_BT_COEXISTENCE
 	/* Configure bluetooth coexistence for combo chips. */
 	if (sc->flags & ATHN_FLAG_BTCOEX)
 		athn_btcoex_init(sc);
-
-	DEBUG_PRINTF("after athn_btcoex_init\n");
 #endif
 	/* Configure LED. */
 	athn_led_init(sc);
