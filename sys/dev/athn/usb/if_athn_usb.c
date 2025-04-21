@@ -493,10 +493,15 @@ athn_usb_detach(device_t self)
 {
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc *sc = &usc->sc_sc;
+	struct ieee80211com *ic = &sc->sc_ic;
 
 	printf("Destroy!\n");
 	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
+
+	ieee80211_ifdetach(ic);
+
 	mtx_destroy(&sc->sc_mtx);
+
 	DEBUG_PRINTF("Destroy\n");
 	printf("End of athn_usb_detach\n");
 	return 0;
