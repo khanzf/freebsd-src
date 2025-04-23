@@ -2035,8 +2035,6 @@ ar5008_enable_antenna_diversity(struct athn_softc *sc)
 void
 ar5008_init_baseband(struct athn_softc *sc)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
 	uint32_t synth_delay;
 
 	synth_delay = ar5008_synth_delay(sc);
@@ -2044,7 +2042,6 @@ ar5008_init_baseband(struct athn_softc *sc)
 	AR_WRITE(sc, AR_PHY_ACTIVE, AR_PHY_ACTIVE_EN);
 	AR_WRITE_BARRIER(sc);
 	DELAY(AR_BASE_PHY_ACTIVE_DELAY + synth_delay);
-#endif
 }
 
 void
@@ -2671,8 +2668,6 @@ ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
 	AR_WRITE_BARRIER(sc);
 
 	printf("ar5008_hw_init working through...\n");
-	if (1)
-		return;
 	/* Second initialization step (common to all channels). */
 	DPRINTFN(4, ("writing common init vals\n"));
 	for (i = 0; i < ini->ncmregs; i++) {
@@ -2747,6 +2742,7 @@ ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
 
 	if (!AR_SINGLE_CHIP(sc))
 		ar5416_rf_reset(sc, c);
+	printf("Full end of function %s - look here\n", __func__);
 }
 
 uint8_t
