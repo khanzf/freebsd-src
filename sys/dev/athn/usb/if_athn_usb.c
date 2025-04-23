@@ -832,10 +832,6 @@ athn_usb_close_pipes(struct athn_usb_softc *usc)
 int
 athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 {
-#if 0
-	printf("Unimplemented: %s:%d\n", __func__, __LINE__);
-	return 0;
-#else
 	struct athn_usb_rx_data *data;
 	int i, error = 0;
 
@@ -870,7 +866,6 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 		athn_usb_free_rx_list(usc);
 	}
 	return (error);
-#endif
 }
 
 void
@@ -892,10 +887,6 @@ athn_usb_free_rx_list(struct athn_usb_softc *usc)
 int
 athn_usb_alloc_tx_list(struct athn_usb_softc *usc)
 {
-#if 0
-	printf("Tracing: %s:%d\n", __func__, __LINE__);
-	return 0;
-#else
 	struct athn_usb_tx_data *data;
 	int i, error = 0;
 
@@ -933,7 +924,6 @@ athn_usb_alloc_tx_list(struct athn_usb_softc *usc)
 	if (error != 0)
 		athn_usb_free_tx_list(usc);
 	return (error);
-#endif
 }
 
 void
@@ -3354,6 +3344,7 @@ athn_usb_init(struct athn_softc *sc)
 	//int i, error;
 	int error;
 
+printf("Welcome to athn_usb_init\n");
 	/* Init host async commands ring. */
 	usc->cmdq.cur = usc->cmdq.next = usc->cmdq.queued = 0;
 
@@ -3369,13 +3360,9 @@ athn_usb_init(struct athn_softc *sc)
 	else
 		printf("not a phayl 2!\n");
 	/* Steal one buffer for beacons. */
-	DEBUG_PRINTF("Tracing: %s:%d\n", __func__, __LINE__);
 	usc->tx_bcn = TAILQ_FIRST(&usc->tx_free_list);
-	DEBUG_PRINTF("Tracing: %s:%d\n", __func__, __LINE__);
 	TAILQ_REMOVE(&usc->tx_free_list, usc->tx_bcn, next);
-	DEBUG_PRINTF("Tracing: %s:%d\n", __func__, __LINE__);
 
-//	c = ic->ic_bsschan;
 	c = ic->ic_curchan;
 	extc = NULL;
 	DEBUG_PRINTF("temporarily cutting out iv_bss->ni_chan, DEFINITELY do not ignore this\n");

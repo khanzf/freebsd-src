@@ -1,5 +1,3 @@
-
-
 /*-
  * Copyright (c) 2022 Farhan Khan <khanzf@gmail.com>
  * Copyright (c) 2009 Damien Bergamini <damien.bergamini@free.fr>
@@ -859,41 +857,31 @@ athn_reset(struct athn_softc *sc, int cold)
 int
 athn_set_power_awake(struct athn_softc *sc)
 {
-DEBUG_PRINTF("start of athn_set_power_awake\n");
+	printf("Start of %s : %d\n", __func__, __LINE__);
 	int ntries, error;
 
-	DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 	/* Do a Power-On-Reset if shutdown. */
 	if ((AR_READ(sc, AR_RTC_STATUS) & AR_RTC_STATUS_M) ==
 	    AR_RTC_STATUS_SHUTDOWN) {
-		DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 		if ((error = athn_reset_power_on(sc)) != 0) {
-			DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 			return (error);
 		}
 		if (!AR_SREV_9380_10_OR_LATER(sc)) {
-			DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 			athn_init_pll(sc, NULL);
 		}
 	}
-	DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 	AR_SETBITS(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN);
-	DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 	AR_WRITE_BARRIER(sc);
-	DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 	DELAY(50);	/* Give chip the chance to awake. */
 
 	/* Poll until RTC is ON. */
 	for (ntries = 0; ntries < 4000; ntries++) {
 		if ((AR_READ(sc, AR_RTC_STATUS) & AR_RTC_STATUS_M) ==
 		    AR_RTC_STATUS_ON) {
-			printf("tracing: %s:%d\n", __func__, __LINE__);
 			break;
 		}
 		DELAY(50);
-		DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 		AR_SETBITS(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN);
-		DEBUG_PRINTF("tracing: %s:%d\n", __func__, __LINE__);
 DEBUG_PRINTF("Times: %d\n", ntries);
 	}
 	if (ntries == 4000) {
@@ -903,7 +891,7 @@ DEBUG_PRINTF("Times: %d\n", ntries);
 
 	AR_CLRBITS(sc, AR_STA_ID1, AR_STA_ID1_PWR_SAV);
 	AR_WRITE_BARRIER(sc);
-DEBUG_PRINTF("end of athn_set_power_awake\n");
+	printf("End of %s : %d\n", __func__, __LINE__);
 	return (0);
 }
 
@@ -1633,9 +1621,6 @@ int
 athn_init_calib(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
-	printf("%s unimplemented...\n", __func__);
-	return 1;
-#if 0
 	struct athn_ops *ops = &sc->ops;
 	int error;
 
@@ -1651,7 +1636,6 @@ athn_init_calib(struct athn_softc *sc, struct ieee80211_channel *c,
 	if (!AR_SREV_9380_10_OR_LATER(sc)) {
 		/* Do PA calibration. */
 		if (AR_SREV_9285_11_OR_LATER(sc)) {
-			extern int ticks;
 			sc->pa_calib_ticks = ticks;
 			if (AR_SREV_9271(sc))
 				ar9271_pa_calib(sc);
@@ -1683,7 +1667,6 @@ athn_init_calib(struct athn_softc *sc, struct ieee80211_channel *c,
 		}
 	}
 	return (0);
-#endif
 }
 
 /*
@@ -2013,8 +1996,6 @@ athn_get_pier_ival(uint8_t fbin, const uint8_t *pierfreq, int npiers,
 void
 athn_init_dma(struct athn_softc *sc)
 {
-	printf("%s unimplemented...\n", __func__);
-#if 0
 	uint32_t reg;
 
 	if (!AR_SREV_9380_10_OR_LATER(sc)) {
@@ -2053,7 +2034,6 @@ athn_init_dma(struct athn_softc *sc)
 	/* Reset Tx status ring. */
 	if (AR_SREV_9380_10_OR_LATER(sc))
 		ar9003_reset_txsring(sc);
-#endif
 }
 
 void
@@ -2693,7 +2673,6 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 		AR_WRITE(sc, AR_INTR_PRIO_SYNC_MASK, 0);
 	}
 
-
 	athn_init_qos(sc);
 
 	AR_SETBITS(sc, AR_PCU_MISC, AR_PCU_MIC_NEW_LOC_ENA);
@@ -2706,8 +2685,6 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 		ar9287_1_3_setup_async_fifo(sc);
 	}
 
-	printf("%s not done, so ending early here\n", __func__);
-	return -1;
 	/* Disable sequence number generation in hardware. */
 	AR_SETBITS(sc, AR_STA_ID1, AR_STA_ID1_PRESERVE_SEQNUM);
 
@@ -2751,6 +2728,8 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 #endif
 	AR_WRITE_BARRIER(sc);
 
+	printf("%s not done, so ending early here\n", __func__);
+	return -1;
 	return (0);
 }
 
@@ -3037,9 +3016,6 @@ athn_updateedca(struct ieee80211com *ic)
 int
 athn_clock_rate(struct athn_softc *sc)
 {
-	printf("%s unimplemented...\n", __func__);
-	return 0;
-#if 0
 	struct ieee80211com *ic = &sc->sc_ic;
 	int clockrate;	/* MHz. */
 
@@ -3049,8 +3025,8 @@ athn_clock_rate(struct athn_softc *sc)
 	 */
 	if (AR_SREV_9287_13_OR_LATER(sc) && !AR_SREV_9380_10_OR_LATER(sc))
 		clockrate = 117;
-	else if (ic->ic_bss->ni_chan != IEEE80211_CHAN_ANYC &&
-	    IEEE80211_IS_CHAN_5GHZ(ic->ic_bss->ni_chan)) {
+	else if (ic->ic_bsschan != IEEE80211_CHAN_ANYC &&
+	    IEEE80211_IS_CHAN_5GHZ(ic->ic_bsschan)) {
 		if (sc->flags & ATHN_FLAG_FAST_PLL_CLOCK)
 			clockrate = AR_CLOCK_RATE_FAST_5GHZ_OFDM;
 		else
@@ -3063,7 +3039,6 @@ athn_clock_rate(struct athn_softc *sc)
 		clockrate *= 2;
 
 	return (clockrate);
-#endif
 }
 
 int
@@ -3075,20 +3050,14 @@ athn_chan_sifs(struct ieee80211_channel *c)
 void
 athn_setsifs(struct athn_softc *sc)
 {
-	printf("%s unimplemented...\n", __func__);
-#if 0
-	int sifs = athn_chan_sifs(sc->sc_ic.ic_bss->ni_chan);
+	int sifs = athn_chan_sifs(sc->sc_ic.ic_curchan);
 	AR_WRITE(sc, AR_D_GBL_IFS_SIFS, (sifs - 2) * athn_clock_rate(sc));
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 int
 athn_acktimeout(struct ieee80211_channel *c, int slot)
 {
-	printf("%s unimplemented...\n", __func__);
-	return 0;
-#if 0
 	int sifs = athn_chan_sifs(c);
 	int ackto = sifs + slot;
 
@@ -3097,27 +3066,21 @@ athn_acktimeout(struct ieee80211_channel *c, int slot)
 		ackto += 64 - sifs - slot;
 
 	return ackto;
-#endif
 }
 
 void
 athn_setacktimeout(struct athn_softc *sc, struct ieee80211_channel *c, int slot)
 {
-	printf("%s unimplemented...\n", __func__);
-#if 0
 	int ackto = athn_acktimeout(c, slot);
 	uint32_t reg = AR_READ(sc, AR_TIME_OUT);
 	reg = RW(reg, AR_TIME_OUT_ACK, ackto * athn_clock_rate(sc));
 	AR_WRITE(sc, AR_TIME_OUT, reg);
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 void
 athn_setctstimeout(struct athn_softc *sc, struct ieee80211_channel *c, int slot)
 {
-	printf("%s unimplemented...\n", __func__);
-#if 0
 	int ctsto = athn_acktimeout(c, slot);
 	int sifs = athn_chan_sifs(c);
 	uint32_t reg = AR_READ(sc, AR_TIME_OUT);
@@ -3129,7 +3092,6 @@ athn_setctstimeout(struct athn_softc *sc, struct ieee80211_channel *c, int slot)
 	reg = RW(reg, AR_TIME_OUT_CTS, ctsto * athn_clock_rate(sc));
 	AR_WRITE(sc, AR_TIME_OUT, reg);
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 void
@@ -3145,19 +3107,21 @@ athn_setclockrate(struct athn_softc *sc)
 void
 athn_updateslot(struct ieee80211com *ic)
 {
-	printf("This should be overwritten: %s unimplemented...\n", __func__);
-#if 0
 	struct athn_softc *sc = ic->ic_softc;
 	int slot;
 
-	slot = (ic->ic_flags & IEEE80211_F_SHSLOT) ?
-	    IEEE80211_DUR_DS_SHSLOT : IEEE80211_DUR_DS_SLOT;
+	printf("Start of %s\n", __func__);
+
+//	slot = (ic->ic_flags & IEEE80211_F_SHSLOT) ?
+//	    IEEE80211_DUR_DS_SHSLOT : IEEE80211_DUR_DS_SLOT;
+	slot = IEEE80211_GET_SLOTTIME(ic);
 	AR_WRITE(sc, AR_D_GBL_IFS_SLOT, slot * athn_clock_rate(sc));
 	AR_WRITE_BARRIER(sc);
 
-	athn_setacktimeout(sc, ic->ic_bss->ni_chan, slot);
-	athn_setctstimeout(sc, ic->ic_bss->ni_chan, slot);
-#endif
+	athn_setacktimeout(sc, ic->ic_curchan, slot);
+	athn_setctstimeout(sc, ic->ic_curchan, slot);
+
+	printf("End of %s\n", __func__);
 }
 
 void

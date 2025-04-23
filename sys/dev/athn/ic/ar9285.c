@@ -115,12 +115,9 @@ void	ar9285_set_txpower(struct athn_softc *, struct ieee80211_channel *,
 	    struct ieee80211_channel *);
 
 /* Extern functions. */
-#if 0
 uint8_t	athn_chan2fbin(struct ieee80211_channel *);
 void	athn_get_pier_ival(uint8_t, const uint8_t *, int, int *, int *);
-#endif
 int	ar5008_attach(struct athn_softc *);
-#if 0
 void	ar5008_write_txpower(struct athn_softc *, int16_t power[]);
 void	ar5008_get_pdadcs(struct athn_softc *, uint8_t, struct athn_pier *,
 	    struct athn_pier *, int, int, uint8_t, uint8_t *, uint8_t *);
@@ -128,7 +125,6 @@ void	ar5008_get_lg_tpow(struct athn_softc *, struct ieee80211_channel *,
 	    uint8_t, const struct ar_cal_target_power_leg *, int, uint8_t[]);
 void	ar5008_get_ht_tpow(struct athn_softc *, struct ieee80211_channel *,
 	    uint8_t, const struct ar_cal_target_power_ht *, int, uint8_t[]);
-#endif
 int	ar9280_set_synth(struct athn_softc *, struct ieee80211_channel *,
 	    struct ieee80211_channel *);
 void	ar9280_spur_mitigate(struct athn_softc *, struct ieee80211_channel *,
@@ -718,9 +714,6 @@ int
 ar9285_init_calib(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
-	printf("Unimplemented: %s\n", __func__);
-	return 0;
-#if 0
 	uint32_t reg, mask, clcgain, rf2g5_svg;
 	int i, maxgain, nclcs, thresh, error;
 
@@ -769,7 +762,6 @@ ar9285_init_calib(struct athn_softc *sc, struct ieee80211_channel *c,
 	AR_WRITE(sc, AR9285_AN_RF2G5, rf2g5_svg);
 	AR_WRITE_BARRIER(sc);
 	return (error);
-#endif
 }
 
 void
@@ -866,21 +858,19 @@ void
 ar9285_set_txpower(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
-	printf("Unimplemented: %s\n", __func__);
-#if 0
 	const struct ar9285_eeprom *eep = sc->eep;
 	const struct ar9285_modal_eep_header *modal = &eep->modalHeader;
 	uint8_t tpow_cck[4], tpow_ofdm[4];
 	uint8_t tpow_cck_ext[4], tpow_ofdm_ext[4];
 	uint8_t tpow_ht20[8], tpow_ht40[8];
 	uint8_t ht40inc;
-	int16_t max_ant_gain, power[ATHN_POWER_COUNT];
+	int16_t power[ATHN_POWER_COUNT];
 	int i;
 
 	ar9285_set_power_calib(sc, c);
 
 	/* Compute transmit power reduction due to antenna gain. */
-	max_ant_gain = modal->antennaGain;
+	//max_ant_gain = modal->antennaGain;
 	/* XXX */
 
 	/* Get CCK target powers. */
@@ -954,5 +944,4 @@ ar9285_set_txpower(struct athn_softc *sc, struct ieee80211_channel *c,
 
 	/* Commit transmit power values to hardware. */
 	ar5008_write_txpower(sc, power);
-#endif
 }
