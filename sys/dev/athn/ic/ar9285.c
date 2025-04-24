@@ -556,9 +556,7 @@ ar9285_pa_calib(struct athn_softc *sc)
 void
 ar9271_pa_calib(struct athn_softc *sc)
 {
-	printf("Unimplemented: %s\n", __func__);
-#if 0
-#if NATHN_USB > 0
+//#if NATHN_USB > 0
 	/* List of registers that need to be saved/restored. */
 	static const uint16_t regs[] = {
 		AR9285_AN_TOP3,
@@ -634,8 +632,7 @@ ar9271_pa_calib(struct athn_softc *sc)
 	/* Restore compensation capacitor value. */
 	AR_WRITE(sc, AR9285_AN_RF2G3, rf2g3_svg);
 	AR_WRITE_BARRIER(sc);
-#endif	/* NATHN_USB */
-#endif // Terminating for FreeBSD usage
+//#endif	/* NATHN_USB */
 }
 
 /*
@@ -645,9 +642,6 @@ int
 ar9285_cl_cal(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
-	printf("Unimplemented: %s\n", __func__);
-	return 0;
-#if 0
 	int ntries;
 
 	AR_SETBITS(sc, AR_PHY_CL_CAL_CTL, AR_PHY_CL_CAL_ENABLE);
@@ -687,7 +681,6 @@ ar9285_cl_cal(struct athn_softc *sc, struct ieee80211_channel *c,
 	AR_CLRBITS(sc, AR_PHY_AGC_CONTROL, AR_PHY_AGC_CONTROL_FLTR_CAL);
 	AR_WRITE_BARRIER(sc);
 	return (0);
-#endif
 }
 
 void
@@ -768,8 +761,6 @@ void
 ar9285_get_pdadcs(struct athn_softc *sc, struct ieee80211_channel *c,
     int nxpdgains, uint8_t overlap, uint8_t *boundaries, uint8_t *pdadcs)
 {
-	printf("Unimplemented: %s\n", __func__);
-#if 0
 	const struct ar9285_eeprom *eep = sc->eep;
 	const struct ar9285_cal_data_per_freq *pierdata;
 	const uint8_t *pierfreq;
@@ -795,14 +786,11 @@ ar9285_get_pdadcs(struct athn_softc *sc, struct ieee80211_channel *c,
 	}
 	ar5008_get_pdadcs(sc, fbin, &lopier, &hipier, nxpdgains,
 	    AR9285_PD_GAIN_ICEPTS, overlap, boundaries, pdadcs);
-#endif
 }
 
 void
 ar9285_set_power_calib(struct athn_softc *sc, struct ieee80211_channel *c)
 {
-	printf("Unimplemented: %s\n", __func__);
-#if 0
 	const struct ar9285_eeprom *eep = sc->eep;
 	uint8_t boundaries[AR_PD_GAINS_IN_MASK];
 	uint8_t pdadcs[AR_NUM_PDADC_VALUES];
@@ -851,7 +839,6 @@ ar9285_set_power_calib(struct athn_softc *sc, struct ieee80211_channel *c)
 		    pdadcs[i + 3] << 24);
 	}
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 void
