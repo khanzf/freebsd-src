@@ -2728,8 +2728,7 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 #endif
 	AR_WRITE_BARRIER(sc);
 
-	printf("%s not done, so ending early here\n", __func__);
-	return -1;
+	printf("End of athn_hw_reset\n");
 	return (0);
 }
 
