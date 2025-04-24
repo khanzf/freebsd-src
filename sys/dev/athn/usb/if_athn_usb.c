@@ -3352,13 +3352,9 @@ printf("Welcome to athn_usb_init\n");
 	error = athn_usb_alloc_rx_list(usc);
 	if (error != 0)
 		goto fail;
-	else
-		printf("not a phayl 1!\n");
 	error = athn_usb_alloc_tx_list(usc);
 	if (error != 0)
 		goto fail;
-	else
-		printf("not a phayl 2!\n");
 	/* Steal one buffer for beacons. */
 	usc->tx_bcn = TAILQ_FIRST(&usc->tx_free_list);
 	TAILQ_REMOVE(&usc->tx_free_list, usc->tx_bcn, next);
@@ -3371,46 +3367,44 @@ printf("Welcome to athn_usb_init\n");
 //	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
 
 	error = athn_set_power_awake(sc);
-	if (error != 0) {
-		printf("Power on failed 1\n");
+	if (error != 0)
 		goto fail;
-	}
 
 	error = athn_usb_wmi_cmd(usc, AR_WMI_CMD_FLUSH_RECV);
-	if (error != 0) {
-		printf("Power on failed 2\n");
+	if (error != 0)
 		goto fail;
-	}
 
 	error = athn_hw_reset(sc, c, extc, 1);
-	if (error != 0) {
-		printf("Power on failed 3\n");
+	if (error != 0)
 		goto fail;
-	}
 
-printf("earlybird\n");
-return 1;
 	ops->set_txpower(sc, c, extc);
 
 	mode = htobe16(IEEE80211_IS_CHAN_2GHZ(c) ?
 	    AR_HTC_MODE_11NG : AR_HTC_MODE_11NA);
 	// Hard-coding in AR_HTC_MODE_11NA
-	mode = AR_HTC_MODE_11NA;
+	mode = AR_HTC_MODE_11NG;
+
+	printf("Before 1 command!\n");
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_SET_MODE,
 	    &mode, sizeof(mode), NULL);
 	if (error != 0)
 		goto fail;
 
+	printf("Before 2 command!\n");
 	error = athn_usb_wmi_cmd(usc, AR_WMI_CMD_ATH_INIT);
 	if (error != 0)
 		goto fail;
 
+	printf("Before 3 command!\n");
 	error = athn_usb_wmi_cmd(usc, AR_WMI_CMD_START_RECV);
 	if (error != 0)
 		goto fail;
 
 	athn_rx_start(sc);
 
+printf("earlybird\n");
+return 1;
 	/* Create main interface on target. */
 	memset(&hvif, 0, sizeof(hvif));
 	hvif.index = 0;
