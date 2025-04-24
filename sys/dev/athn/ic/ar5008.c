@@ -1968,8 +1968,6 @@ void
 ar5008_set_phy(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
 	uint32_t phy;
 
 	if (AR_SREV_9285_10_OR_LATER(sc))
@@ -1993,7 +1991,6 @@ ar5008_set_phy(struct athn_softc *sc, struct ieee80211_channel *c,
 	/* Set carrier sense timeout. */
 	AR_WRITE(sc, AR_CST, SM(AR_CST_TIMEOUT_LIMIT, 15));
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 void
@@ -2054,8 +2051,6 @@ ar5008_disable_phy(struct athn_softc *sc)
 void
 ar5008_init_chains(struct athn_softc *sc)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
 	if (sc->rxchainmask == 0x5 || sc->txchainmask == 0x5)
 		AR_SETBITS(sc, AR_PHY_ANALOG_SWAP, AR_PHY_SWAP_ALT_CHAIN);
 
@@ -2070,7 +2065,6 @@ ar5008_init_chains(struct athn_softc *sc)
 	}
 	AR_WRITE(sc, AR_SELFGEN_MASK, sc->txchainmask);
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 void
@@ -2742,7 +2736,6 @@ ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
 
 	if (!AR_SINGLE_CHIP(sc))
 		ar5416_rf_reset(sc, c);
-	printf("Full end of function %s - look here\n", __func__);
 }
 
 uint8_t
