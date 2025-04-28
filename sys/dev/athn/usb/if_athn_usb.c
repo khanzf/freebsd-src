@@ -311,6 +311,8 @@ athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 //	struct usb_page_cache *pc;
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
+	printf("Rx callback happened!\n");
+
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
 		/* XXX Fall through */
@@ -1578,19 +1580,15 @@ athn_usb_read(struct athn_softc *sc, uint32_t addr)
 	uint32_t val;
 	int error;
 
-DEBUG_PRINTF("DEBUG: athn_usb_read addr = %d\n", addr);
-
 	/* Flush pending writes for strict consistency. */
 	athn_usb_write_barrier(sc);
 
 	addr = htobe32(addr);
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_REG_READ,
 	    &addr, sizeof(addr), &val);
-	if (error != 0) {
-		printf("hed tine: athn_usb_read val = 0xdeadbeef\n");
+	if (error != 0)
 		return (0xdeadbeef);
-	}
-DEBUG_PRINTF("DEBUG: athn_usb_read val = %d\n", val);
+
 	return (htobe32(val));
 }
 
@@ -3382,8 +3380,8 @@ printf("Welcome to athn_usb_init\n");
 
 	mode = htobe16(IEEE80211_IS_CHAN_2GHZ(c) ?
 	    AR_HTC_MODE_11NG : AR_HTC_MODE_11NA);
+	printf("mode is %d %x\n", mode, mode);
 	// Hard-coding in AR_HTC_MODE_11NA
-	mode = AR_HTC_MODE_11NG;
 
 	printf("Before 1 command!\n");
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_SET_MODE,
@@ -3403,30 +3401,34 @@ printf("Welcome to athn_usb_init\n");
 
 	athn_rx_start(sc);
 
-printf("earlybird\n");
-return 1;
 	/* Create main interface on target. */
 	memset(&hvif, 0, sizeof(hvif));
 	hvif.index = 0;
 	IEEE80211_ADDR_COPY(hvif.myaddr, ic->ic_macaddr);
 	switch (ic->ic_opmode) {
 	case IEEE80211_M_STA:
+		printf("IEEE80211_M_STA condition\n");
 		hvif.opmode = htobe32(AR_HTC_M_STA);
 		break;
 	case IEEE80211_M_MONITOR:
+		printf("IEEE80211_M_MONITOR condition\n");
 		hvif.opmode = htobe32(AR_HTC_M_MONITOR);
 		break;
 #ifndef IEEE80211_STA_ONLY
 	case IEEE80211_M_IBSS:
+		printf("IEEE80211_M_IBSS condition\n");
 		hvif.opmode = htobe32(AR_HTC_M_IBSS);
 		break;
 	case IEEE80211_M_AHDEMO:
+		printf("IEEE80211_M_AHDEMO condition\n");
 		hvif.opmode = htobe32(AR_HTC_M_AHDEMO);
 		break;
 	case IEEE80211_M_HOSTAP:
+		printf("IEEE80211_M_HOSTAP condition\n");
 		hvif.opmode = htobe32(AR_HTC_M_HOSTAP);
 		break;
 	default:
+		printf("Go to failure condition\n");
 		goto fail;
 #endif
 	}
@@ -3450,6 +3452,9 @@ return 1;
 	if (error != 0)
 		goto fail;
 	usc->free_node_slots = ~(1 << sta.sta_index);
+
+printf("earlybird\n");
+return 1;
 
 	/* Update target capabilities. */
 	memset(&hic, 0, sizeof(hic));
