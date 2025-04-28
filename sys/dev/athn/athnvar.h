@@ -88,7 +88,7 @@ struct athn_tx_radiotap_header {
 	 1 << IEEE80211_RADIOTAP_CHANNEL)
 
 struct athn_tx_buf {
-//	LIST_ENTRY(athn_tx_buf)	bf_list;
+	STAILQ_ENTRY(athn_tx_buf)	bf_list;
 
 	void				*bf_descs;
 	bus_dmamap_t			bf_map;
@@ -110,7 +110,7 @@ struct athn_txq {
 };
 
 struct athn_rx_buf {
-	//LIST_ENTRY(athn_rx_buf)	bf_list;
+	STAILQ_ENTRY(athn_rx_buf)	bf_list;
 
 	void				*bf_desc;
 	bus_dmamap_t			bf_map;
@@ -130,8 +130,10 @@ struct athn_rxq {
 #endif
 	int				count;
 
-	//LIST_HEAD(, athn_rx_buf)	head;
+	STAILQ_HEAD(, athn_rx_buf)	head;
 };
+
+
 
 /* Software rate indexes. */
 #define ATHN_RIDX_CCK1	0
