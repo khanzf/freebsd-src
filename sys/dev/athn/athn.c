@@ -617,8 +617,6 @@ athn_get_chanlist(struct athn_softc *sc)
 void
 athn_rx_start(struct athn_softc *sc)
 {
-	printf("%s unimplemented\n", __func__);
-#if 0
 	struct ieee80211com *ic = &sc->sc_ic;
 	uint32_t rfilt;
 
@@ -668,7 +666,6 @@ athn_rx_start(struct athn_softc *sc)
 	/* Start PCU Rx. */
 	AR_CLRBITS(sc, AR_DIAG_SW, AR_DIAG_RX_DIS | AR_DIAG_RX_ABORT);
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 void
