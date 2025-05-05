@@ -133,9 +133,8 @@ void		athn_usb_write(struct athn_softc *, uint32_t, uint32_t);
 void		athn_usb_write_barrier(struct athn_softc *);
 int		athn_usb_media_change(struct ifnet *);
 void		athn_usb_next_scan(void *);
-int		athn_usb_newstate(struct ieee80211com *, enum ieee80211_state,
+int		athn_usb_newstate(struct ieee80211vap *, enum ieee80211_state,
 		    int);
-void		athn_usb_newstate_cb(struct athn_usb_softc *, void *);
 void		athn_usb_newassoc(struct ieee80211_node *, int);
 void		athn_usb_newassoc_cb(struct athn_usb_softc *, void *);
 struct ieee80211_node *athn_usb_node_alloc(struct ieee80211vap *, const uint8_t mac[IEEE80211_ADDR_LEN]);
@@ -143,8 +142,7 @@ void		athn_usb_count_active_sta(void *, struct ieee80211_node *);
 void		athn_usb_newauth_cb(struct athn_usb_softc *, void *);
 int		athn_usb_newauth(struct ieee80211com *,
 		    struct ieee80211_node *, int, uint16_t);
-void		athn_usb_node_free(struct ieee80211com *,
-		    struct ieee80211_node *);
+void		athn_usb_node_free(struct ieee80211_node *);
 void		athn_usb_node_free_cb(struct athn_usb_softc *, void *);
 int		athn_usb_ampdu_tx_start(struct ieee80211com *,
 		    struct ieee80211_node *, uint8_t);
@@ -569,8 +567,7 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 
 	/* override state transition machine */
 	avp->newstate = vap->iv_newstate;
-	vap->iv_newstate = athn_newstate;
-
+	vap->iv_newstate = athn_usb_newstate;
 //	vap->vp_set_key = athn_usb_set_key;
 //	vap->vp_delete_key = athn_usb_delete_key;
 
@@ -587,6 +584,8 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 
 	vap->iv_recv_mgmt = ??
 */
+
+
 
 	ieee80211_vap_attach(vap, athn_usb_media_change, //ieee80211_media_change,
 		ieee80211_media_status, mac);
@@ -649,12 +648,10 @@ athn_usb_attachhook(device_t self)
 //	ifp->if_start = athn_usb_start;
 //	ifp->if_watchdog = athn_usb_watchdog;
 	ic->ic_node_alloc = athn_usb_node_alloc;
+//	usc->sc_node_free = ic->ic_node_free;		// No OpenBSD equivalent?
+	ic->ic_node_free = athn_usb_node_free;		// No OpenBSD equivalent?
 //	ic->ic_newauth = athn_usb_newauth;
 	ic->ic_newassoc = athn_usb_newassoc;
-#ifndef IEEE80211_STA_ONLY
-//	usc->sc_node_free = ic->ic_node_free;		// No OpenBSD equivalent?
-//	ic->ic_node_free = athn_usb_node_free;		// No OpenBSD equivalent?
-#endif
 //	ic->ic_updateslot = athn_usb_updateslot;	
 //	ic->ic_updateedca = athn_usb_updateedca;
 
@@ -671,8 +668,8 @@ athn_usb_attachhook(device_t self)
 	ic->ic_media.ifm_change = athn_usb_media_change;
 	timeout_set(&sc->scan_to, athn_usb_next_scan, usc);
 
-	ops->rx_enable = athn_usb_rx_enable;
 #endif
+	ops->rx_enable = athn_usb_rx_enable;
 
 	/* Reset HW key cache entries. */
 	int i; // XXX In the future move this integer back up
@@ -1667,71 +1664,76 @@ athn_usb_next_scan(void *arg)
 #endif
 }
 
+#if 0
 int
-athn_usb_newstate(struct ieee80211com *ic, enum ieee80211_state nstate,
+athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
     int arg)
 {
-	printf("%s unimplemented.\n", __func__);
-	return 0;
-#if 0
 	struct athn_usb_softc *usc = ic->ic_softc;
 	struct athn_usb_cmd_newstate cmd;
 
 	/* Do it in a process context. */
-	cmd.state = nstate;
+	//cmd.state = nstate;
 	cmd.arg = arg;
-	athn_usb_do_async(usc, athn_usb_newstate_cb, &cmd, sizeof(cmd));
+	//athn_usb_do_async(usc, athn_usb_newstate_cb, &cmd, sizeof(cmd));
 	return (0);
-#endif
 }
+#endif
 
-void
-athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
+int
+athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
+    int arg)
 {
-	printf("%s unimplemented.\n", __func__);
-#if 0
-	struct athn_usb_cmd_newstate *cmd = arg;
-	struct athn_softc *sc = &usc->sc_sc;
-	struct ieee80211com *ic = &sc->sc_ic;
+	printf("Working through this code, not finished %s\n", __func__);
+	struct athn_vap *avp = (struct athn_vap *)vap;
+	struct ieee80211com *ic = vap->iv_ic;
+	struct athn_softc *sc = ic->ic_softc;
+	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	enum ieee80211_state ostate;
 	uint32_t reg, imask;
-	int s, error;
+	int error;
 
-	timeout_del(&sc->calib_to);
+//	timeout_del(&sc->calib_to);
 
-	s = splnet();
-	ostate = ic->ic_state;
+	IEEE80211_UNLOCK(ic);
+	ATHN_LOCK(sc);
+	ostate = vap->iv_state;
 
-	if (ostate == IEEE80211_S_RUN && ic->ic_opmode == IEEE80211_M_STA) {
-		athn_usb_remove_node(usc, ic->ic_bss);
-		reg = AR_READ(sc, AR_RX_FILTER);
-		reg = (reg & ~AR_RX_FILTER_MYBEACON) |
-		    AR_RX_FILTER_BEACON;
-		AR_WRITE(sc, AR_RX_FILTER, reg);
-		AR_WRITE_BARRIER(sc);
+	switch(ostate) {
+	case IEEE80211_S_RUN:
+		if (ic->ic_opmode == IEEE80211_M_STA) {
+			athn_usb_remove_node(usc, vap->iv_bss);
+			reg = AR_READ(sc, AR_RX_FILTER);
+			reg = (reg & ~AR_RX_FILTER_MYBEACON) |
+			    AR_RX_FILTER_BEACON;
+			AR_WRITE(sc, AR_RX_FILTER, reg);
+			AR_WRITE_BARRIER(sc);
+		}
+		break;
+	default:
+		break;
 	}
-	switch (cmd->state) {
+
+	switch (nstate) {
 	case IEEE80211_S_INIT:
 		athn_set_led(sc, 0);
 		break;
 	case IEEE80211_S_SCAN:
 		/* Make the LED blink while scanning. */
 		athn_set_led(sc, !sc->led_state);
-		error = athn_usb_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
+		printf("This is not complete IEEE80211_S_SCAN\n");
+		error = athn_usb_switch_chan(sc, ic->ic_curchan, NULL);
 		if (error)
-			printf("%s: could not switch to channel %d\n",
-			    usc->usb_dev.dv_xname,
-			    ieee80211_chan2ieee(ic, ic->ic_bss->ni_chan));
-		if (!usbd_is_dying(usc->sc_udev))
-			timeout_add_msec(&sc->scan_to, 200);
+			device_printf(sc->sc_dev, "could not switch to channel %d\n",
+			    ieee80211_chan2ieee(ic, ic->ic_curchan));
 		break;
 	case IEEE80211_S_AUTH:
+		printf("This is not complete IEEE80211_S_AUTH\n");
 		athn_set_led(sc, 0);
-		error = athn_usb_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
+		error = athn_usb_switch_chan(sc, ic->ic_curchan, NULL);
 		if (error)
-			printf("%s: could not switch to channel %d\n",
-			    usc->usb_dev.dv_xname,
-			    ieee80211_chan2ieee(ic, ic->ic_bss->ni_chan));
+			device_printf(sc->sc_dev, "could not switch to channel %d\n",
+			    ieee80211_chan2ieee(ic, ic->ic_curchan));
 		break;
 	case IEEE80211_S_ASSOC:
 		break;
@@ -1743,21 +1745,21 @@ athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 
 		if (ic->ic_opmode == IEEE80211_M_STA) {
 			/* Create node entry for our BSS */
-			error = athn_usb_create_node(usc, ic->ic_bss);
+			error = athn_usb_create_node(usc, vap->iv_bss);
 			if (error)
-				printf("%s: could not update firmware station "
-				    "table\n", usc->usb_dev.dv_xname);
+				device_printf(sc->sc_dev, "could not update firmware station table\n");
 		}
-		athn_set_bss(sc, ic->ic_bss);
+		athn_set_bss(sc, vap->iv_bss);
 		athn_usb_wmi_cmd(usc, AR_WMI_CMD_DISABLE_INTR);
-#ifndef IEEE80211_STA_ONLY
+//#ifndef IEEE80211_STA_ONLY
 		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
-			athn_usb_switch_chan(sc, ic->ic_bss->ni_chan, NULL);
+			printf("Not certain that this should be done here.\n");
+			athn_usb_switch_chan(sc, ic->ic_curchan, NULL);
 			athn_set_hostap_timers(sc);
 			/* Enable software beacon alert interrupts. */
 			imask = htobe32(AR_IMR_SWBA);
 		} else
-#endif
+//#endif
 		{
 			athn_set_sta_timers(sc);
 			/* Enable beacon miss interrupts. */
@@ -1773,10 +1775,13 @@ athn_usb_newstate_cb(struct athn_usb_softc *usc, void *arg)
 		athn_usb_wmi_xcmd(usc, AR_WMI_CMD_ENABLE_INTR,
 		    &imask, sizeof(imask), NULL);
 		break;
+	default:
+		break;
 	}
-	(void)sc->sc_newstate(ic, cmd->state, cmd->arg);
-	splx(s);
-#endif
+
+	ATHN_UNLOCK(sc);
+	IEEE80211_LOCK(ic);
+	return (avp->newstate(vap, nstate, arg));
 }
 
 void
@@ -1825,14 +1830,15 @@ athn_usb_newassoc_cb(struct athn_usb_softc *usc, void *arg)
 struct ieee80211_node *
 athn_usb_node_alloc(struct ieee80211vap *vap, const uint8_t mac[IEEE80211_ADDR_LEN])
 {
-//	printf("%s unimplemented.\n", __func__);
-//	return NULL;
-//#if 0
 	struct athn_node *an;
+	printf("%s executed\n", __func__);
 
 	an = malloc(sizeof(struct athn_node), M_80211_NODE, M_NOWAIT | M_ZERO);
+	if (an == NULL) {
+//		device_printf(sc->sc_dev, "%s: unable to allocate node\n");
+		return NULL;
+	}
 	return (struct ieee80211_node *)an;
-//#endif
 }
 
 
@@ -1936,9 +1942,8 @@ athn_usb_newauth(struct ieee80211com *ic, struct ieee80211_node *ni,
 #endif
 }
 
-#ifndef IEEE80211_STA_ONLY
 void
-athn_usb_node_free(struct ieee80211com *ic, struct ieee80211_node *ni)
+athn_usb_node_free(struct ieee80211_node *ni)
 {
 	printf("%s unimplemented.\n", __func__);
 #if 0
@@ -1979,7 +1984,6 @@ athn_usb_node_free_cb(struct athn_usb_softc *usc, void *arg)
 		    usc->usb_dev.dv_xname, sta_index);
 #endif
 }
-#endif /* IEEE80211_STA_ONLY */
 
 int
 athn_usb_ampdu_tx_start(struct ieee80211com *ic, struct ieee80211_node *ni,
@@ -2222,11 +2226,9 @@ athn_usb_remove_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 void
 athn_usb_rx_enable(struct athn_softc *sc)
 {
-	printf("%s unimplemented.\n", __func__);
-#if 0
+	printf("entered %s.\n", __func__);
 	AR_WRITE(sc, AR_CR, AR_CR_RXE);
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 int
@@ -3453,9 +3455,6 @@ printf("Welcome to athn_usb_init\n");
 		goto fail;
 	usc->free_node_slots = ~(1 << sta.sta_index);
 
-printf("earlybird\n");
-return 1;
-
 	/* Update target capabilities. */
 	memset(&hic, 0, sizeof(hic));
 	hic.ampdu_limit = htobe32(0x0000ffff);
@@ -3467,7 +3466,9 @@ return 1;
 	if (error != 0)
 		goto fail;
 
-	return 0; // Get out of jail early card
+printf("earlybird\n");
+return 0;
+
 #if 0
 	/* Queue Rx xfers. */
 	for (i = 0; i < ATHN_USB_RX_LIST_COUNT; i++) {
