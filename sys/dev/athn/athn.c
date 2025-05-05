@@ -223,8 +223,10 @@ athn_config_ht(struct athn_softc *sc)
 //	int i, ntxstreams, nrxstreams;
 	int ntxstreams, nrxstreams;
 
-	if ((sc->flags & ATHN_FLAG_11N) == 0)
+	if ((sc->flags & ATHN_FLAG_11N) == 0) {
+		printf("exit condition\n");
 		return;
+	}
 
 	/* Set HT capabilities. */
 	// XXX Guess based on OpenBSD's values
@@ -278,7 +280,7 @@ athn_attach(struct athn_softc *sc)
 	int error;
 
 	/* Read hardware revision. */
-debug_knob = 0;
+debug_knob = 1;
 	athn_get_chipid(sc);
 
 	if ((error = athn_reset_power_on(sc)) != 0) {
@@ -295,22 +297,36 @@ DEBUG_PRINTF("Exit athn_power_awake\n");
 DEBUG_PRINTF("mac_ver is 0%02x\n", sc->mac_rev);
 DEBUG_PRINTF("mac_ver is %d\n",    sc->mac_rev);
 
-	if (AR_SREV_5416(sc) || AR_SREV_9160(sc))
+	if (AR_SREV_5416(sc) || AR_SREV_9160(sc)) {
 		error = ar5416_attach(sc);
-	else if (AR_SREV_9280(sc))
+		printf("option %d\n", __LINE__);
+	}
+	else if (AR_SREV_9280(sc)) {
 		error = ar9280_attach(sc);
-	else if (AR_SREV_9285(sc))
+		printf("option %d\n", __LINE__);
+	}
+	else if (AR_SREV_9285(sc)) {
 		error = ar9285_attach(sc);
+		printf("option %d\n", __LINE__);
+	}
 //#if NATHN_USB > 0
-	else if (AR_SREV_9271(sc))
+	else if (AR_SREV_9271(sc)) {
 		error = ar9285_attach(sc);
+		printf("option %d\n", __LINE__);
 //#endif
-	else if (AR_SREV_9287(sc))
+	}
+	else if (AR_SREV_9287(sc)) {
 		error = ar9287_attach(sc);
-	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc))
+		printf("option %d\n", __LINE__);
+	}
+	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc)) {
 		error = ar9380_attach(sc);
-	else
+		printf("option %d\n", __LINE__);
+	}
+	else {
 		error = ENOTSUP;
+		printf("option %d\n", __LINE__);
+	}
 
 	if (error != 0) {
 		device_printf(sc->sc_dev, "could not attach chip\n");
@@ -322,6 +338,7 @@ debug_knob = 1;
 	athn_set_power_sleep(sc);
 
 	if (!(sc->flags & ATHN_FLAG_USB)) {
+		printf("if usb?!\n");
 #if 0
 		error = sc->ops.dma_alloc(sc);
 		if (error != 0) {
@@ -333,6 +350,9 @@ debug_knob = 1;
 		sc->bcnbuf = SIMPLEQ_FIRST(&sc->txbufs);
 		SIMPLEQ_REMOVE_HEAD(&sc->txbufs, bf_list);
 #endif
+	}
+	else {
+		printf("not usb\n");
 	}
 
 	if (sc->flags & ATHN_FLAG_RFSILENT) {
@@ -713,17 +733,31 @@ athn_get_chipid(struct athn_softc *sc)
 	DEBUG_PRINTF("Starting athn_get_chipid\n");
 
 	reg = AR_READ(sc, AR_SREV);
-	DEBUG_PRINTF("Reg is %x %d\n", reg, reg);
+	printf("Reg is %x %d\n", reg, reg);
 	if (MS(reg, AR_SREV_ID) == 0xff) {
 		sc->mac_ver = MS(reg, AR_SREV_VERSION2);
 		sc->mac_rev = MS(reg, AR_SREV_REVISION2);
-		if (!(reg & AR_SREV_TYPE2_HOST_MODE))
+		/*
+		 * Keeping this here for now, but this may be a mistake to
+		 * assign the BUS here. That should be done in the
+		 * athn_BUS_attach function, not in the BUS-agnostic
+		 * attachment function.
+		 */
+		if (!(reg & AR_SREV_TYPE2_HOST_MODE)) {
+			printf("Top PCI\n");
 			sc->flags |= ATHN_FLAG_PCIE;
+		} else {
+			printf("Top non-PCI\n");
+		}
 	} else {
 		sc->mac_ver = MS(reg, AR_SREV_VERSION);
 		sc->mac_rev = MS(reg, AR_SREV_REVISION);
-		if (sc->mac_ver == AR_SREV_VERSION_5416_PCIE)
+		if (sc->mac_ver == AR_SREV_VERSION_5416_PCIE) {
+			printf("Bottom PCI\n");
 			sc->flags |= ATHN_FLAG_PCIE;
+		} else {
+			printf("Bottom non-PCIe\n");
+		}
 	}
 
 	DEBUG_PRINTF("Exiting athn_get_chipid\n");
@@ -2883,6 +2917,7 @@ athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	//struct ifnet *ifp = &ic->ic_if;
 	struct ieee80211com *ic = vap->iv_ic;
 	struct athn_softc *sc = ic->ic_softc;
+	struct athn_vap *avp = (struct athn_vap *)vap;
 	uint32_t reg;
 	int error;
 
@@ -2975,7 +3010,8 @@ athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		break;
 	}
 
-	return (sc->sc_newstate(ic, nstate, arg));
+//	return (sc->sc_newstate(ic, nstate, arg));
+	return (avp->newstate(vap, nstate, arg));
 }
 
 void
