@@ -255,7 +255,7 @@ enum ISOCountryCode {
 	CTRY_SWEDEN		= 752,	/* Sweden */
 	CTRY_SWITZERLAND	= 756,	/* Switzerland */
 	CTRY_SYRIA		= 760,	/* Syria */
-	CTRY_TAIWAN		= 158,	/* Taiwan, Province of China */
+	CTRY_TAIWAN		= 158,	/* Taiwan */
 	CTRY_TAJIKISTAN		= 762,
 	CTRY_TANZANIA		= 834,	/* United Republic of Tanzania */
 	CTRY_THAILAND		= 764,	/* Thailand */
