@@ -31,11 +31,17 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
  * THE POSSIBILITY OF SUCH DAMAGES.
  */
+
+
+#include "opt_global.h"
+#include "opt_wlan.h"
+
 #include "if_wtapvar.h"
 #include <sys/uio.h>    /* uio struct */
 #include <sys/jail.h>
 #include <net/if_var.h>
 #include <net/vnet.h>
+#include <net/if_private.h>
 
 #include <net80211/ieee80211_ratectl.h>
 #include "if_medium.h"
