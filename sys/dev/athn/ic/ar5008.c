@@ -215,7 +215,9 @@ ar5008_attach(struct athn_softc *sc)
 	}
 
 	/* Get RF revision. */
+	ATHN_LOCK(sc);
 	sc->rf_rev = ar5416_get_rf_rev(sc);
+	ATHN_UNLOCK(sc);
 
 	base = sc->eep;
 	eep_ver = (base->version >> 12) & 0xf;
@@ -279,6 +281,8 @@ ar5008_attach(struct athn_softc *sc)
 
 /*
  * Read 16-bit word from ROM.
+ * Only called during attachment phase
+ * Mutex Entry State: Locked
  */
 int
 ar5008_read_eep_word(struct athn_softc *sc, uint32_t addr, uint16_t *val)
@@ -289,8 +293,7 @@ ar5008_read_eep_word(struct athn_softc *sc, uint32_t addr, uint16_t *val)
 	reg = AR_READ(sc, AR_EEPROM_OFFSET(addr));
 	for (ntries = 0; ntries < 1000; ntries++) {
 		reg = AR_READ(sc, AR_EEPROM_STATUS_DATA);
-		if (!(reg & (AR_EEPROM_STATUS_DATA_BUSY |
-		    AR_EEPROM_STATUS_DATA_PROT_ACCESS))) {
+		if (!(reg & (AR_EEPROM_STATUS_DATA_BUSY | AR_EEPROM_STATUS_DATA_PROT_ACCESS))) {
 			*val = MS(reg, AR_EEPROM_STATUS_DATA_VAL);
 			return (0);
 		}
@@ -309,7 +312,9 @@ ar5008_read_rom(struct athn_softc *sc)
 	int error;
 
 	/* Determine ROM endianness. */
+	ATHN_LOCK(sc);
 	error = ar5008_read_eep_word(sc, AR_EEPROM_MAGIC_OFFSET, &magic);
+	ATHN_UNLOCK(sc);
 	if (error != 0)
 		return (error);
 	if (magic != AR_EEPROM_MAGIC) {
@@ -332,10 +337,13 @@ ar5008_read_rom(struct athn_softc *sc)
 	eep = sc->eep;
 	end = sc->eep_base + sc->eep_size / sizeof(uint16_t);
 	for (addr = sc->eep_base; addr < end; addr++, eep++) {
+		ATHN_LOCK(sc);
 		if ((error = ar5008_read_eep_word(sc, addr, eep)) != 0) {
 			DPRINTF(("could not read ROM at 0x%x\n", addr));
+			ATHN_UNLOCK(sc);
 			return (error);
 		}
+		ATHN_UNLOCK(sc);
 		if (need_swap)
 			*eep = bswap16(*eep);
 		sum ^= *eep;
@@ -411,8 +419,6 @@ ar5008_gpio_write(struct athn_softc *sc, int pin, int set)
 		AR_WRITE(sc, AR_GPIO_IN_OUT, reg);
 	}
 	AR_WRITE_BARRIER(sc);
-#if 0
-#endif
 }
 
 void
@@ -1936,9 +1942,6 @@ ar5008_synth_delay(struct athn_softc *sc)
 int
 ar5008_rf_bus_request(struct athn_softc *sc)
 {
-	printf("%s unimplemented\n", __func__);
-	return 0;
-#if 0
 	int ntries;
 
 	/* Request RF Bus grant. */
@@ -1950,7 +1953,6 @@ ar5008_rf_bus_request(struct athn_softc *sc)
 	}
 	DPRINTF(("could not kill baseband Rx"));
 	return (ETIMEDOUT);
-#endif
 }
 
 void
@@ -2021,12 +2023,18 @@ ar5008_set_delta_slope(struct athn_softc *sc, struct ieee80211_channel *c,
 	AR_WRITE_BARRIER(sc);
 }
 
+/*
+ * Only called during attachment
+ * Mutex Entry State: unlocked
+ */
 void
 ar5008_enable_antenna_diversity(struct athn_softc *sc)
 {
+	ATHN_LOCK(sc);
 	AR_SETBITS(sc, AR_PHY_CCK_DETECT,
 	    AR_PHY_CCK_DETECT_BB_ENABLE_ANT_FAST_DIV);
 	AR_WRITE_BARRIER(sc);
+	ATHN_UNLOCK(sc);
 }
 
 void
@@ -2447,6 +2455,9 @@ ar5008_calib_adc_dc_off(struct athn_softc *sc)
 	memset(&sc->calib, 0, sizeof(sc->calib));
 }
 
+/*
+ * Entry lock state: Locked
+ */
 void
 ar5008_write_txpower(struct athn_softc *sc, int16_t power[ATHN_POWER_COUNT])
 {

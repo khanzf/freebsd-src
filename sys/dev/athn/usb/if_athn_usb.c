@@ -674,8 +674,11 @@ athn_usb_attachhook(device_t self)
 	/* Reset HW key cache entries. */
 	int i; // XXX In the future move this integer back up
 //	sc->kc_entries = 10;
-	for (i = 0; i < sc->kc_entries; i++)
+	for (i = 0; i < sc->kc_entries; i++) {
+		ATHN_LOCK(sc); // Should the lock be outside of the loop?
 		athn_reset_key(sc, i);
+		ATHN_UNLOCK(sc);
+	}
 
 	ops->enable_antenna_diversity(sc);
 
@@ -685,7 +688,9 @@ athn_usb_attachhook(device_t self)
 		athn_btcoex_init(sc);
 #endif
 	/* Configure LED. */
+	ATHN_LOCK(sc);
 	athn_led_init(sc);
+	ATHN_UNLOCK(sc);
 
 //	if (bootverbose)
 		ieee80211_announce(ic);
@@ -1270,6 +1275,9 @@ athn_usb_htc_msg(struct athn_usb_softc *usc, uint16_t msg_id, void *buf,
 	struct ar_htc_frame_hdr *htc;
 	struct ar_htc_msg_hdr *msg;
 
+	/* Lock done in athn_usb_htc_connect_svc and athn_usb_htc_setup */
+	ATHN_LOCK_ASSERT(sc);
+
 	htc = (struct ar_htc_frame_hdr *)data->buf;
 	memset(htc, 0, sizeof(*htc));
 	htc->endpoint_id = 0;
@@ -1449,6 +1457,9 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 #endif
 }
 
+/*
+ * Mutex entry state: Locked
+ */
 int
 athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
     int ilen, void *obuf)
@@ -1461,12 +1472,6 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 	DEBUG_PRINTF("athn_usb_wmi_xcmd cmd_id = %d\n", cmd_id);
 
-//	if (usbd_is_dying(usc->sc_udev))
-//		return ENXIO;
-
-//	s = splusb();
-	// REVISIT THIS CODE BELOW. WHY THE LOOP?!?!?!?
-#if 1 // Why is this here at all???
 	while (usc->wait_cmd_id) {
 		/*
 		 * The previous USB transfer is not done yet. We can't use
@@ -1474,18 +1479,11 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		 * in the USB stack.
 		 */
 		//tsleep(&usc->wait_cmd_id, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT);
-		ATHN_LOCK(sc);
 		DEBUG_PRINTF("This one probably needs some sort of wakeup equivalent... %d\n", usc->wait_cmd_id);
 		msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT); /* Wait 1 second at most */
-		ATHN_UNLOCK(sc);
 //		tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmx",
 //		    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
-//		if (usbd_is_dying(usc->sc_udev)) {
-//			splx(s);
-//			return ENXIO;
 	}
-#endif
-//	splx(s);
 
 	htc = (struct ar_htc_frame_hdr *)data->buf;
 	memset(htc, 0, sizeof(*htc));
@@ -1501,9 +1499,9 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 	data->len = sizeof(*htc) + sizeof(*wmi) + ilen;
 
-	ATHN_LOCK(sc);
+//	ATHN_LOCK(sc);
 	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
-	ATHN_UNLOCK(sc);
+//	ATHN_UNLOCK(sc);
 
 //	usbd_setup_xfer(data->xfer, usc->tx_intr_pipe, NULL, data->buf,
 //	    sizeof(*htc) + sizeof(*wmi) + ilen,
@@ -1522,9 +1520,9 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
 //	error = tsleep(&usc->wait_cmd_id, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
-	ATHN_LOCK(sc);
+//	ATHN_LOCK(sc);
 	error = msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
-	ATHN_UNLOCK(sc);
+//	ATHN_UNLOCK(sc);
 //	error = tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmi",
 //	    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
 	if (error) {
@@ -1542,7 +1540,6 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	usc->wait_cmd_id = 0;
 	wakeup(&usc->wait_cmd_id);
 
-//	splx(s);
 	return (error);
 }
 
@@ -1606,7 +1603,6 @@ athn_usb_write_barrier(struct athn_softc *sc)
 {
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 
-DEBUG_PRINTF("DEBUG: athn_usb_write_barrier\n");
 	if (usc->wcount == 0)
 		return;	/* Nothing to write. */
 
@@ -1710,6 +1706,12 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 			AR_WRITE_BARRIER(sc);
 		}
 		break;
+	case IEEE80211_S_INIT:
+	case IEEE80211_S_SCAN:
+	case IEEE80211_S_AUTH:
+	case IEEE80211_S_ASSOC:
+	case IEEE80211_S_CAC:
+	case IEEE80211_S_SLEEP:
 	default:
 		break;
 	}
@@ -1775,6 +1777,8 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 		athn_usb_wmi_xcmd(usc, AR_WMI_CMD_ENABLE_INTR,
 		    &imask, sizeof(imask), NULL);
 		break;
+	case IEEE80211_S_CSA:
+	case IEEE80211_S_SLEEP:
 	default:
 		break;
 	}
@@ -2191,6 +2195,9 @@ athn_usb_node_set_rates(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 int
 athn_usb_remove_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 {
+
+	// I think I need to put a lock here, but check flow graph
+
 	printf("%s unimplemented.\n", __func__);
 	return 0;
 #if 0
@@ -2226,7 +2233,6 @@ athn_usb_remove_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 void
 athn_usb_rx_enable(struct athn_softc *sc)
 {
-	printf("entered %s.\n", __func__);
 	AR_WRITE(sc, AR_CR, AR_CR_RXE);
 	AR_WRITE_BARRIER(sc);
 }
@@ -3346,6 +3352,7 @@ athn_usb_init(struct athn_softc *sc)
 
 printf("Welcome to athn_usb_init\n");
 	/* Init host async commands ring. */
+	ATHN_LOCK(sc);
 	usc->cmdq.cur = usc->cmdq.next = usc->cmdq.queued = 0;
 
 	/* Allocate Tx/Rx buffers. */
@@ -3467,6 +3474,7 @@ printf("Welcome to athn_usb_init\n");
 		goto fail;
 
 printf("earlybird\n");
+ATHN_UNLOCK(sc); // Make sure to earlybird this
 return 0;
 
 #if 0
@@ -3498,8 +3506,10 @@ return 0;
 		ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
 #endif
 	athn_usb_wait_async(usc);
+	ATHN_UNLOCK(sc);
 	return (0);
  fail:
+	ATHN_UNLOCK(sc);
 	DEBUG_PRINTF("athn_usb_stop not working cuz you know...\n");
 //	athn_usb_stop(ifp);
 	return (error);

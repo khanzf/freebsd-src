@@ -736,6 +736,10 @@ ar5416_reverse_bits(uint8_t v, int nbits)
 	return (v >> (8 - nbits));
 }
 
+/*
+ * Only called during attachment
+ * Entry Mutex State: Locked
+ */
 uint8_t
 ar5416_get_rf_rev(struct athn_softc *sc)
 {
