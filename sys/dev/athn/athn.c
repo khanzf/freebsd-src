@@ -208,6 +208,8 @@ void		ar9003_reset_txsring(struct athn_softc *);
 void	athn_config_ht(struct athn_softc *sc);
 void	athn_getradiocaps(struct ieee80211com *ic,
 			int maxchans, int *nchans, struct ieee80211_channel chans[]);
+void	athn_scan_start(struct ieee80211com *ic);
+void	athn_scan_end(struct ieee80211com *ic);
 
 #if 0
 struct cfdriver athn_cd = {
@@ -280,22 +282,25 @@ athn_attach(struct athn_softc *sc)
 	int error;
 
 	/* Read hardware revision. */
-debug_knob = 1;
+	ATHN_LOCK(sc);
 	athn_get_chipid(sc);
+	ATHN_UNLOCK(sc);
 
+	ATHN_LOCK(sc);
 	if ((error = athn_reset_power_on(sc)) != 0) {
+		ATHN_UNLOCK(sc);
 		device_printf(sc->sc_dev, "could not reset chip\n");
 		return (error);
 	}
+	ATHN_UNLOCK(sc);
 
+	ATHN_LOCK(sc);
 	if ((error = athn_set_power_awake(sc)) != 0) {
+		ATHN_UNLOCK(sc);
 		device_printf(sc->sc_dev, "could not wakeup chip\n");
 		return (error);
 	}
-DEBUG_PRINTF("Exit athn_power_awake\n");
-
-DEBUG_PRINTF("mac_ver is 0%02x\n", sc->mac_rev);
-DEBUG_PRINTF("mac_ver is %d\n",    sc->mac_rev);
+	ATHN_UNLOCK(sc);
 
 	if (AR_SREV_5416(sc) || AR_SREV_9160(sc)) {
 		error = ar5416_attach(sc);
@@ -335,7 +340,9 @@ DEBUG_PRINTF("mac_ver is %d\n",    sc->mac_rev);
 
 debug_knob = 1;
 	/* We can put the chip in sleep state now. */
+	ATHN_LOCK(sc);
 	athn_set_power_sleep(sc);
+	ATHN_UNLOCK(sc);
 
 	if (!(sc->flags & ATHN_FLAG_USB)) {
 		printf("if usb?!\n");
@@ -491,16 +498,16 @@ debug_knob = 1;
 	ieee80211_ifattach(ic);
 
 	ic->ic_bsschan = &ic->ic_channels[0];
-	/*
-	ic->ic_raw_xmit = ??
-	ic->sc_scan_start = ??
-	ic->sc_scan_curchan = ic->ic_scan_curchan;
-	ic->ic_scan_curchan = ??
-	ic->ic_scan_end = ??
-	ic->ic_update_chw = ??
-	*/
+//	ic->ic_raw_xmit = ??
+	ic->ic_scan_start = athn_scan_start;
+//	ic->sc_scan_curchan = ic->ic_scan_curchan;
+//	ic->ic_scan_curchan = ??
+	ic->ic_scan_end = athn_scan_end;
+//	ic->ic_update_chw = ??
 	ic->ic_getradiocaps = athn_getradiocaps;
-	ic->ic_set_channel = athn_set_chan;
+	// This function (ic_set_channel) appears to require a handler to LOCK/UNLOCK this function
+//	ic->ic_set_channel = athn_set_chan_handler;
+//	ic->ic_set_channel = athn_set_chan;
 	/*
 	ic->ic_transmit = ??
 	*/
@@ -726,14 +733,16 @@ athn_intr(void *xsc)
 #endif
 }
 
+/*
+ * Only called by athn_attach
+ * Entry mutex state: Unlocked
+ */
 void
 athn_get_chipid(struct athn_softc *sc)
 {
 	uint32_t reg;
-	DEBUG_PRINTF("Starting athn_get_chipid\n");
 
 	reg = AR_READ(sc, AR_SREV);
-	printf("Reg is %x %d\n", reg, reg);
 	if (MS(reg, AR_SREV_ID) == 0xff) {
 		sc->mac_ver = MS(reg, AR_SREV_VERSION2);
 		sc->mac_rev = MS(reg, AR_SREV_REVISION2);
@@ -759,8 +768,6 @@ athn_get_chipid(struct athn_softc *sc)
 			printf("Bottom non-PCIe\n");
 		}
 	}
-
-	DEBUG_PRINTF("Exiting athn_get_chipid\n");
 }
 
 const char *
@@ -810,11 +817,28 @@ athn_get_rf_name(struct athn_softc *sc)
 	return ("unknown");
 }
 
+/*
+ * Called by
+ * 1) athn_init -> athn_reset_power_on
+
+ * 2) athn_newstate -> athn_switch_chan -> athn_set_power_awake -> athn_reset_power_on
+ * 3) athn_newstate -> athn_switch_chan -> athn_hw_reset -> athn_set_power_awake -> athn_reset_power_on
+ * 4) athn_newstate -> athn_switch_chan -> athn_hw_reset -> athn_reset_power_on
+ * 5) athn_usb_init -> athn_set_power_awake -> athn_reset_power_on
+ *
+ * 6) athn_attach -> athn_reset_power_on
+ * 7) athn_attach -> athn_set_power_awake -> athn_reset_power_on
+ *
+ * Entry Mutex State: Locked
+ */
 int
 athn_reset_power_on(struct athn_softc *sc)
 {
 	DEBUG_PRINTF("start of athn_reset_power_on\n");
 	int ntries;
+
+	/* Locking should be done prior to this point */
+	ATHN_LOCK_ASSERT(sc);
 
 	/* Set force wake. */
 	AR_WRITE(sc, AR_RTC_FORCE_WAKE,
@@ -885,11 +909,17 @@ athn_reset(struct athn_softc *sc, int cold)
 	return (0);
 }
 
+/*
+ * Entry Mutex State: Locked
+ */
 int
 athn_set_power_awake(struct athn_softc *sc)
 {
 	printf("Start of %s : %d\n", __func__, __LINE__);
 	int ntries, error;
+
+	/* Lock should be done in athn_newstate or athn_usb_attach */
+	ATHN_LOCK_ASSERT(sc);
 
 	/* Do a Power-On-Reset if shutdown. */
 	if ((AR_READ(sc, AR_RTC_STATUS) & AR_RTC_STATUS_M) ==
@@ -926,6 +956,12 @@ DEBUG_PRINTF("Times: %d\n", ntries);
 	return (0);
 }
 
+/*
+ * Called by:
+ * 1) athn_usb_attachhook -> athn_attach -> athn_set_power_sleep
+ * 2) athn_usb_suspend -> athn_usb_stop -> athn_set_power_sleep
+ * Entry mutex State: Locked
+ */
 void
 athn_set_power_sleep(struct athn_softc *sc)
 {
@@ -994,6 +1030,9 @@ athn_init_pll(struct athn_softc *sc, const struct ieee80211_channel *c)
 	AR_WRITE_BARRIER(sc);
 }
 
+/*
+ * Called by ar5008_attach -> athn_config_nonpcie
+ */
 void
 athn_write_serdes(struct athn_softc *sc, const struct athn_serdes *serdes)
 {
@@ -1006,15 +1045,19 @@ athn_write_serdes(struct athn_softc *sc, const struct athn_serdes *serdes)
 	AR_WRITE_BARRIER(sc);
 }
 
+/*
+ * Only called during attachment process
+ * Entry mutex state:
+ */
 void
 athn_config_pcie(struct athn_softc *sc)
 {
-	debug_knob = 1;
 	/*
 	 * XXX Note to self:
     * Why is this happening? Using USB, not PCI. Check on the OpenBSD side
 	 */
 	/* Disable PLL when in L0s as well as receiver clock when in L1. */
+	ATHN_LOCK(sc);
 	athn_write_serdes(sc, sc->serdes);
 
 	DELAY(1000);
@@ -1027,6 +1070,7 @@ athn_config_pcie(struct athn_softc *sc)
 	AR_WRITE(sc, AR_WA, ATHN_PCIE_WAEN);
 #endif
 	AR_WRITE_BARRIER(sc);
+	ATHN_UNLOCK(sc);
 }
 
 /*
@@ -1124,6 +1168,9 @@ athn_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 	int error, qid;
+
+	/* Locking should be done prior to this point */
+	ATHN_LOCK_ASSERT(sc);
 
 	/* Disable interrupts. */
 	athn_disable_interrupts(sc);
@@ -1231,6 +1278,9 @@ athn_reset_key(struct athn_softc *sc, int entry)
 	AR_WRITE_BARRIER(sc);
 }
 
+/*
+ * Mutex entry state: Locked
+ */
 int
 athn_set_key(struct ieee80211com *ic, struct ieee80211_node *ni,
     struct ieee80211_key *k)
@@ -1336,6 +1386,10 @@ athn_delete_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 #endif
 }
 
+/*
+ * Entry Mutex State: locked
+ * Called during attach and init
+ */
 void
 athn_led_init(struct athn_softc *sc)
 {
@@ -3591,6 +3645,17 @@ athn_getradiocaps(struct ieee80211com *ic,
 //		NET80211_CBW_FLAG_HT40 : 0);
 }
 
+void
+athn_scan_start(struct ieee80211com *ic)
+{
+	/* Nothing happens here */
+}
+
+void
+athn_scan_end(struct ieee80211com *ic)
+{
+	/* Nothing happens here */
+}
 
 MODULE_VERSION(athn, 1);
 MODULE_DEPEND(athn, wlan, 1, 1, 1);
