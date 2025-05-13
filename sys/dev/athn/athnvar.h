@@ -384,6 +384,8 @@ struct athn_softc;
 
 #define ATHN_LOCK(sc)		mtx_lock(&(sc)->sc_mtx)
 #define ATHN_UNLOCK(sc)		mtx_unlock(&(sc)->sc_mtx)
+#define ATHN_LOCK_ASSERT(sc)	mtx_assert(&(sc)->sc_mtx, MA_OWNED)
+#define ATHN_UNLOCK_ASSERT(sc)	mtx_assert(&(sc)->sc_mtx, MA_NOTOWNED)
 
 struct athn_ops {
 	/* Bus callbacks. */
