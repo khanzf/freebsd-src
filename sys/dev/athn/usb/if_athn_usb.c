@@ -174,7 +174,6 @@ void		athn_usb_bcneof(struct usbd_xfer *, void *);
 void		athn_usb_swba(struct athn_usb_softc *);
 void		athn_usb_tx_status(void *, struct ieee80211_node *);
 void		athn_usb_rx_wmi_ctrl(struct athn_usb_softc *, uint8_t *, int);
-void		athn_usb_intr(struct usb_xfer *, usb_error_t);
 void		athn_usb_rx_radiotap(struct athn_softc *, struct mbuf *,
 		    struct ar_rx_status *);
 void		athn_usb_rx_frame(struct athn_usb_softc *, struct mbuf *);
@@ -228,6 +227,7 @@ void		athn_updateslot(struct ieee80211com *);
 void athn_intr_tx_callback(struct usb_xfer *, usb_error_t);
 void athn_data_rx_callback(struct usb_xfer *, usb_error_t);
 void athn_data_tx_callback(struct usb_xfer *, usb_error_t);
+void athn_intr_rx_callback(struct usb_xfer *, usb_error_t);
 
 void print_hex(const void *buffer, size_t length);
 
@@ -273,7 +273,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 			.short_xfer_ok = 1,
 			.pipe_bof = 1
 		},
-		.callback = athn_usb_intr,
+		.callback = athn_intr_rx_callback,
 		.bufsize = 0x40,	// 64 bytes
 		.interval = 1
 	},
@@ -2618,7 +2618,7 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 }
 
 void
-athn_usb_intr(struct usb_xfer *xfer, usb_error_t usb_error)
+athn_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 {
 	int actlen;
 	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
