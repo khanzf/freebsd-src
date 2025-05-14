@@ -229,90 +229,87 @@ void athn_intr_tx_callback(struct usb_xfer *, usb_error_t);
 void athn_data_rx_callback(struct usb_xfer *, usb_error_t);
 void athn_data_tx_callback(struct usb_xfer *, usb_error_t);
 
+void print_hex(const void *buffer, size_t length);
+
 #define ATHN_USB_DEV(v, p) { USB_VPI(v, p, 0) }
 static const STRUCT_USB_HOST_ID athn_devs[] = {
 	ATHN_USB_DEV(USB_VENDOR_ATHEROS2, USB_PRODUCT_ATHEROS2_AR9271U)
 };
 
-
-#if 0
-const struct cfattach athn_usb_ca = {
-	sizeof(struct athn_usb_softc),
-	athn_usb_match,
-	athn_usb_attach,
-	athn_usb_detach
-};
-#endif
-
 #define ATHN_CONFIG_INDEX	0
 
+/* Some devices allow 2 extra Rx bulk outputs */
 static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 	[ATHN_TX_DATA] = {
 		.type = UE_BULK,
-		.endpoint = 0x01, // AR_PIPE_TX_DATA,
+		.endpoint = AR_PIPE_TX_DATA,
 		.direction = UE_DIR_TX,
 		.flags = {
 			.short_xfer_ok = 1,
-//			.force_short_xfer = 1,
+			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
 		.callback = athn_data_tx_callback,
-		.bufsize = 0x200,
+		.bufsize = 0x200,	// 512 bytes
+		.interval = USB_DEFAULT_INTERVAL,
 	},
 	[ATHN_RX_DATA] = {
 		.type = UE_BULK,
-		.endpoint = 0x82, //AR_PIPE_RX_DATA,
+		.endpoint = AR_PIPE_RX_DATA,
 		.direction = UE_DIR_RX,
 		.flags = {
 			.short_xfer_ok = 1,
-//			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
 		.callback = athn_data_rx_callback,
-		.bufsize = 0x200,
+		.bufsize = 0x200,	// 512 bytes
+		.interval = USB_DEFAULT_INTERVAL,
 	},
 	[ATHN_RX_INTR] = {
 		.type = UE_INTERRUPT,
-		.endpoint = 0x83, // AR_PIPE_RX_INTR,
+		.endpoint = AR_PIPE_RX_INTR,
 		.direction = UE_DIR_RX,
 		.flags = {
 			.short_xfer_ok = 1,
-//			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
 		.callback = athn_usb_intr,
-		.bufsize = 0x40,
-//		.callback = athn_intr_rx_callback,
-//		.interval = USB_DEFAULT_INTERVAL,
+		.bufsize = 0x40,	// 64 bytes
+		.interval = 1
 	},
 	[ATHN_TX_INTR] = {
 		.type = UE_INTERRUPT,
-		.endpoint = 0x04, //AR_PIPE_TX_INTR,
+		.endpoint = AR_PIPE_TX_INTR,
 		.direction = UE_DIR_TX,
 		.flags = {
-//			.short_xfer_ok = 1,
-//			.force_short_xfer = 1,
+			.short_xfer_ok = 1,
 			.pipe_bof = 1
 		},
 		.callback= athn_intr_tx_callback,
-		.bufsize = 512, // 200, //40,
+		.bufsize = 0x200,	// 512 bytes
 		.timeout = ATHN_USB_CMD_TIMEOUT,
-//		.interval = 1,
+		.interval = 1
 	}
 };
+
 
 /* FreeBSD additions */
 void
 athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
 	int actlen;
-//	struct usb_page_cache *pc;
+	uint8_t var[500];
+	struct usb_page_cache *pc;
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
-	printf("Rx callback happened!\n");
+	printf("Rx data callback happened!\n");
+	// I think this includes rxeof()
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
+		printf("Frame len: %d\n", actlen);
+		pc = usbd_xfer_get_frame(xfer, 0);
+		usbd_copy_out(pc, 0, var, actlen);
 		/* XXX Fall through */
 	case USB_ST_SETUP:
 		//pc = usbd_xfer_get_frame(xfer, 0);
@@ -3347,7 +3344,6 @@ athn_usb_init(struct athn_softc *sc)
 	struct ar_htc_target_sta sta;
 	struct ar_htc_cap_target hic;
 	uint16_t mode;
-	//int i, error;
 	int error;
 
 printf("Welcome to athn_usb_init\n");
@@ -3392,18 +3388,15 @@ printf("Welcome to athn_usb_init\n");
 	printf("mode is %d %x\n", mode, mode);
 	// Hard-coding in AR_HTC_MODE_11NA
 
-	printf("Before 1 command!\n");
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_SET_MODE,
 	    &mode, sizeof(mode), NULL);
 	if (error != 0)
 		goto fail;
 
-	printf("Before 2 command!\n");
 	error = athn_usb_wmi_cmd(usc, AR_WMI_CMD_ATH_INIT);
 	if (error != 0)
 		goto fail;
 
-	printf("Before 3 command!\n");
 	error = athn_usb_wmi_cmd(usc, AR_WMI_CMD_START_RECV);
 	if (error != 0)
 		goto fail;
@@ -3473,22 +3466,13 @@ printf("Welcome to athn_usb_init\n");
 	if (error != 0)
 		goto fail;
 
+	/* Queue Rx xfers. */
+	usbd_transfer_start(usc->usc_xfer[ATHN_RX_DATA]);
+
 printf("earlybird\n");
 ATHN_UNLOCK(sc); // Make sure to earlybird this
 return 0;
-
 #if 0
-	/* Queue Rx xfers. */
-	for (i = 0; i < ATHN_USB_RX_LIST_COUNT; i++) {
-		data = &usc->rx_data[i];
-
-		usbd_setup_xfer(data->xfer, usc->rx_data_pipe, data, data->buf,
-		    ATHN_USB_RXBUFSZ, USBD_SHORT_XFER_OK | USBD_NO_COPY,
-		    USBD_NO_TIMEOUT, athn_usb_rxeof);
-		error = usbd_transfer(data->xfer);
-		if (error != 0 && error != USBD_IN_PROGRESS)
-			goto fail;
-	}
 	/* We're ready to go. */
 	ifp->if_flags |= IFF_RUNNING;
 	ifq_clr_oactive(&ifp->if_snd);
@@ -3505,7 +3489,7 @@ return 0;
 	else
 		ieee80211_new_state(ic, IEEE80211_S_SCAN, -1);
 #endif
-	athn_usb_wait_async(usc);
+//	athn_usb_wait_async(usc);
 	ATHN_UNLOCK(sc);
 	return (0);
  fail:
