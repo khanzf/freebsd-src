@@ -26,6 +26,15 @@ struct athn_usb_softc;
 #define ATHN_IFACE_INDEX		0
 #define EDCA_NUM_AC 4
 
+// XXX TODO: Figure out what the enum should look like with WME_AC_BE, might not be relevant
+enum {
+	ATHN_TX_DATA,
+	ATHN_RX_DATA,
+	ATHN_RX_INTR,
+	ATHN_TX_INTR,
+	ATHN_N_TRANSFERS, // A semi-copy from RTWN_N_TRANSFER
+};
+
 void	ar9271u_attach(struct athn_usb_softc *);
 
 enum {
