@@ -109,6 +109,7 @@ void		athn_write_serdes(struct athn_softc *,
 		    const struct athn_serdes *);
 void		athn_config_pcie(struct athn_softc *);
 void		athn_config_nonpcie(struct athn_softc *);
+void		athn_set_channel(struct ieee80211com *ic);
 void		athn_set_chan(struct ieee80211com *ic);
 int		athn_switch_chan(struct athn_softc *,
 		    struct ieee80211_channel *, struct ieee80211_channel *);
@@ -506,7 +507,7 @@ debug_knob = 1;
 //	ic->ic_update_chw = ??
 	ic->ic_getradiocaps = athn_getradiocaps;
 	// This function (ic_set_channel) appears to require a handler to LOCK/UNLOCK this function
-//	ic->ic_set_channel = athn_set_chan_handler;
+	ic->ic_set_channel = athn_set_channel;
 //	ic->ic_set_channel = athn_set_chan;
 	/*
 	ic->ic_transmit = ??
@@ -1113,6 +1114,16 @@ athn_config_nonpcie(struct athn_softc *sc)
 {
 	printf("Going into athn_config_nonpcie\n");
 	athn_write_serdes(sc, &ar_nonpcie_serdes);
+}
+
+void
+athn_set_channel(struct ieee80211com *ic)
+{
+	struct athn_softc *sc = ic->ic_softc;
+
+	ATHN_LOCK(sc);
+	athn_set_chan(ic);
+	ATHN_UNLOCK(sc);
 }
 
 void
