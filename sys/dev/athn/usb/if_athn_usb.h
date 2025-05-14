@@ -26,13 +26,12 @@ struct athn_usb_softc;
 #define ATHN_IFACE_INDEX		0
 #define EDCA_NUM_AC 4
 
-// XXX TODO: Figure out what the enum should look like with WME_AC_BE, might not be relevant
 enum {
 	ATHN_TX_DATA,
 	ATHN_RX_DATA,
 	ATHN_RX_INTR,
 	ATHN_TX_INTR,
-	ATHN_N_TRANSFERS, // A semi-copy from RTWN_N_TRANSFER
+	ATHN_N_TRANSFERS,
 };
 
 void	ar9271u_attach(struct athn_usb_softc *);
@@ -530,8 +529,6 @@ struct athn_usb_softc {
 	uint8_t				ep_uapsd;
 	uint8_t				ep_mgmt;
 	uint8_t				ep_data[EDCA_NUM_AC];
-#if 0
-#endif
 
 	/* 
 	 * Firmware cannot handle more than 8 STAs.
