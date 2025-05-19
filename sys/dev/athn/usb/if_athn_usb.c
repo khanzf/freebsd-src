@@ -230,6 +230,18 @@ void athn_data_tx_callback(struct usb_xfer *, usb_error_t);
 void athn_intr_rx_callback(struct usb_xfer *, usb_error_t);
 
 void print_hex(const void *buffer, size_t length);
+void print_hex(const void *buffer, size_t length) {
+   const uint8_t *buf = (const uint8_t *)buffer;
+
+   for (size_t i = 0; i < length; i += 16) {
+      printf("00%04zX: ", i);  // Print offset starting with "00"
+      for (size_t j = 0; j < 16 && (i + j) < length; j++) {
+         printf("%02X ", buf[i + j]);  // Print each byte in hex
+      }   
+      printf("\n");
+   }   
+}
+
 
 #define ATHN_USB_DEV(v, p) { USB_VPI(v, p, 0) }
 static const STRUCT_USB_HOST_ID athn_devs[] = {
@@ -294,28 +306,60 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 
 
 /* FreeBSD additions */
+/*
+ * This function is the equivalent of OpenBSD's athn_usb_rxeof
+ */
 void
 athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
+	struct athn_softc *sc = usbd_xfer_softc(xfer);
+	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
+//	struct usb_page_cache *pc;
+	struct athn_usb_rx_data *data;
 	int actlen;
-	uint8_t var[500];
-	struct usb_page_cache *pc;
+
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	printf("Rx data callback happened!\n");
-	// I think this includes rxeof()
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
-		printf("Frame len: %d\n", actlen);
-		pc = usbd_xfer_get_frame(xfer, 0);
-		usbd_copy_out(pc, 0, var, actlen);
+		data = STAILQ_FIRST(&usc->sc_rx_active);
+		if (data == NULL)
+			goto tr_setup;
+		STAILQ_REMOVE_HEAD(&usc->sc_rx_active, next);
+		// rxeof???
+		STAILQ_INSERT_TAIL(&usc->sc_rx_active, data, next);
+
 		/* XXX Fall through */
 	case USB_ST_SETUP:
-		//pc = usbd_xfer_get_frame(xfer, 0);
-		usbd_xfer_get_frame(xfer, 0);
-		usbd_xfer_set_frame_len(xfer, 0, usbd_xfer_max_len(xfer));
+tr_setup:
+
+		data = STAILQ_FIRST(&usc->sc_rx_active);
+		if (data == NULL)
+			return;
+		STAILQ_REMOVE_HEAD(&usc->sc_rx_inactive, next);
+		STAILQ_INSERT_TAIL(&usc->sc_rx_active, data, next);
+
+		/* This will usbd_copy_out */
+		usbd_xfer_set_frame_data(xfer, 0, data->buf, 100);
 		usbd_transfer_submit(xfer);
+		ATHN_UNLOCK(sc);
+
+		print_hex( data->buf , actlen);
+//		wh = mtod(m, struct ieee80211_frame *);
+//		ni = ieee80211_find_rxnode(
+//		ieee80211_input(ni, m, SOMETHING, nf);
+
+
+//		if (i=0;i<sc->sc_rx_count;i++) {
+//			rssi = sc->sc_rx_data[i].rssi;
+//			m = sc->sc_rx_data[i].m;
+//			sc->sc_rx_data[i].m = NULL;
+//		
+//		}
+		ATHN_LOCK(sc);
+
 		break;
 	default: /* Error */
 		break;
@@ -842,19 +886,8 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 		data = &usc->rx_data[i];
 
 		data->sc = usc;	/* Backpointer for callbacks. */
-
-		// XXX This seems to setup an auto-transfer to USB,
-		// but FreeBSD has a totally different model.
-		// I need to verify how this should be done.
-/*
-		data->xfer = usbd_alloc_xfer(usc->sc_udev);
-		if (data->xfer == NULL) {
-			printf("%s: could not allocate xfer\n",
-			    usc->usb_dev.dv_xname);
-			error = ENOMEM;
-			break;
-		}
-*/
+		data->m = NULL;
+		data->ni = NULL;
 		data->buf = malloc(ATHN_USB_RXBUFSZ, M_USBDEV, M_NOWAIT);
 		if (data->buf == NULL) {
 			printf(": could not allocate xfer buffer\n"); //,
