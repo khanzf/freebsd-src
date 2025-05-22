@@ -309,7 +309,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 /*
  * This function is the equivalent of OpenBSD's athn_usb_rxeof
  */
-void
+		  void
 athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
 	struct athn_softc *sc = usbd_xfer_softc(xfer);
@@ -323,41 +323,47 @@ athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 	printf("Rx data callback happened!\n");
 
 	switch(USB_GET_STATE(xfer)) {
-	case USB_ST_TRANSFERRED:
+	 case USB_ST_TRANSFERRED:
+printf("Line %d\n", __LINE__);
 		data = STAILQ_FIRST(&usc->sc_rx_active);
-		if (data == NULL)
+printf("Line %d\n", __LINE__);
+		if (data == NULL) {
+			printf("goto tr_setup\n");
 			goto tr_setup;
+		}
+printf("Line %d\n", __LINE__);
 		STAILQ_REMOVE_HEAD(&usc->sc_rx_active, next);
+printf("Line %d\n", __LINE__);
 		// rxeof???
 		STAILQ_INSERT_TAIL(&usc->sc_rx_active, data, next);
+printf("Line %d\n", __LINE__);
 
 		/* XXX Fall through */
 	case USB_ST_SETUP:
 tr_setup:
-
-		data = STAILQ_FIRST(&usc->sc_rx_active);
-		if (data == NULL)
+printf("Line %d\n", __LINE__);
+		data = STAILQ_FIRST(&usc->sc_rx_inactive);
+printf("Line %d\n", __LINE__);
+		if (data == NULL) {
+printf("Line %d\n", __LINE__);
+			printf("early drop 1\n");
 			return;
+		}
+printf("Line %d\n", __LINE__);
 		STAILQ_REMOVE_HEAD(&usc->sc_rx_inactive, next);
+printf("Line %d\n", __LINE__);
 		STAILQ_INSERT_TAIL(&usc->sc_rx_active, data, next);
+printf("Line %d\n", __LINE__);
 
 		/* This will usbd_copy_out */
-		usbd_xfer_set_frame_data(xfer, 0, data->buf, 100);
+printf("Line %d\n", __LINE__);
+		usbd_xfer_set_frame_data(xfer, 0, data->buf,
+			usbd_xfer_max_len(xfer));
+printf("Line %d\n", __LINE__);
+//ATHN_USB_RXBUFSZ);
 		usbd_transfer_submit(xfer);
 		ATHN_UNLOCK(sc);
-
-		print_hex( data->buf , actlen);
-//		wh = mtod(m, struct ieee80211_frame *);
-//		ni = ieee80211_find_rxnode(
-//		ieee80211_input(ni, m, SOMETHING, nf);
-
-
-//		if (i=0;i<sc->sc_rx_count;i++) {
-//			rssi = sc->sc_rx_data[i].rssi;
-//			m = sc->sc_rx_data[i].m;
-//			sc->sc_rx_data[i].m = NULL;
-//		
-//		}
+		print_hex( data->buf , ATHN_USB_RXBUFSZ);
 		ATHN_LOCK(sc);
 
 		break;
