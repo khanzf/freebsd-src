@@ -1169,8 +1169,6 @@ athn_set_chan(struct ieee80211com *ic)
 		ops->set_delta_slope(sc, ic->ic_curchan, extc);
 
 	ops->spur_mitigate(sc, ic->ic_curchan, extc);
-
-	printf("End of set channel\n");
 }
 
 int
