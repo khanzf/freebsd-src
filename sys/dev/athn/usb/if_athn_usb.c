@@ -324,46 +324,33 @@ athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 	switch(USB_GET_STATE(xfer)) {
 	 case USB_ST_TRANSFERRED:
-printf("Line %d\n", __LINE__);
-		data = STAILQ_FIRST(&usc->sc_rx_active);
-printf("Line %d\n", __LINE__);
+		data = STAILQ_FIRST(&usc->usc_rx_active);
 		if (data == NULL) {
 			printf("goto tr_setup\n");
 			goto tr_setup;
 		}
-printf("Line %d\n", __LINE__);
-		STAILQ_REMOVE_HEAD(&usc->sc_rx_active, next);
-printf("Line %d\n", __LINE__);
+		STAILQ_REMOVE_HEAD(&usc->usc_rx_active, next);
 		// rxeof???
-		STAILQ_INSERT_TAIL(&usc->sc_rx_active, data, next);
-printf("Line %d\n", __LINE__);
+		STAILQ_INSERT_TAIL(&usc->usc_rx_inactive, data, next);
 
 		/* XXX Fall through */
 	case USB_ST_SETUP:
 tr_setup:
-printf("Line %d\n", __LINE__);
-		data = STAILQ_FIRST(&usc->sc_rx_inactive);
-printf("Line %d\n", __LINE__);
+		data = STAILQ_FIRST(&usc->usc_rx_inactive);
 		if (data == NULL) {
-printf("Line %d\n", __LINE__);
 			printf("early drop 1\n");
 			return;
 		}
-printf("Line %d\n", __LINE__);
-		STAILQ_REMOVE_HEAD(&usc->sc_rx_inactive, next);
-printf("Line %d\n", __LINE__);
-		STAILQ_INSERT_TAIL(&usc->sc_rx_active, data, next);
-printf("Line %d\n", __LINE__);
+		STAILQ_REMOVE_HEAD(&usc->usc_rx_inactive, next);
+		STAILQ_INSERT_TAIL(&usc->usc_rx_active, data, next);
 
 		/* This will usbd_copy_out */
-printf("Line %d\n", __LINE__);
 		usbd_xfer_set_frame_data(xfer, 0, data->buf,
 			usbd_xfer_max_len(xfer));
-printf("Line %d\n", __LINE__);
 //ATHN_USB_RXBUFSZ);
 		usbd_transfer_submit(xfer);
 		ATHN_UNLOCK(sc);
-		print_hex( data->buf , ATHN_USB_RXBUFSZ);
+//		print_hex( data->buf , ATHN_USB_RXBUFSZ);
 		ATHN_LOCK(sc);
 
 		break;
@@ -901,9 +888,17 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 			break;
 		}
 	}
+
 	if (error != 0) {
 		printf("athn_usb_free_rx_list prego\n");
 		athn_usb_free_rx_list(usc);
+	}
+
+	STAILQ_INIT(&usc->usc_rx_active);
+	STAILQ_INIT(&usc->usc_rx_inactive);
+
+	for (i = 0; i < ATHN_USB_RX_LIST_COUNT; i++) {
+		STAILQ_INSERT_HEAD(&usc->usc_rx_inactive, &usc->rx_data[i], next);
 	}
 	return (error);
 }
