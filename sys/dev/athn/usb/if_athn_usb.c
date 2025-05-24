@@ -223,24 +223,29 @@ void		athn_updateslot(struct ieee80211com *);
 
 
 /* FreeBSD additions */
-//void athn_intr_rx_callback(struct usb_xfer *, usb_error_t);
 void athn_intr_tx_callback(struct usb_xfer *, usb_error_t);
 void athn_data_rx_callback(struct usb_xfer *, usb_error_t);
 void athn_data_tx_callback(struct usb_xfer *, usb_error_t);
 void athn_intr_rx_callback(struct usb_xfer *, usb_error_t);
 
-void print_hex(const void *buffer, size_t length);
-void print_hex(const void *buffer, size_t length) {
+static void print_hex(const void *buffer, size_t length) {
    const uint8_t *buf = (const uint8_t *)buffer;
+	int maxlen = 5000;
+   char variable[maxlen];
 
-   for (size_t i = 0; i < length; i += 16) {
-      printf("00%04zX: ", i);  // Print offset starting with "00"
-      for (size_t j = 0; j < 16 && (i + j) < length; j++) {
-         printf("%02X ", buf[i + j]);  // Print each byte in hex
-      }   
-      printf("\n");
-   }   
+	bzero(variable, maxlen);
+	//snprintf(variable, maxlen, "{%zu, \"", length);
+	printf("sakina {%zu, \"", length);
+
+	for (int i = 0; i < length - 1; i++) {
+//		snprintf(variable, maxlen, "\\x%02x", buf[i]);
+		printf("\\x%02x", buf[i]);
+	}
+//	snprintf(variable, maxlen, "\"},");
+	printf("\"},\n");
+
 }
+
 
 
 #define ATHN_USB_DEV(v, p) { USB_VPI(v, p, 0) }
@@ -347,10 +352,9 @@ tr_setup:
 		/* This will usbd_copy_out */
 		usbd_xfer_set_frame_data(xfer, 0, data->buf,
 			usbd_xfer_max_len(xfer));
-//ATHN_USB_RXBUFSZ);
 		usbd_transfer_submit(xfer);
 		ATHN_UNLOCK(sc);
-//		print_hex( data->buf , ATHN_USB_RXBUFSZ);
+		print_hex( data->buf , ATHN_USB_RXBUFSZ);
 		ATHN_LOCK(sc);
 
 		break;
