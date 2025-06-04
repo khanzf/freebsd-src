@@ -460,6 +460,7 @@ struct athn_softc {
 //	int				(*sc_newstate)(struct ieee80211com *,
 //					    enum ieee80211_state, int);
 
+	int						sc_running;
 	bus_dma_tag_t			sc_dmat;
 
 	struct callout			scan_to;
@@ -647,6 +648,9 @@ extern int	athn_intr(void *);
 
 struct athn_vap {
 	struct ieee80211vap vap;
+	// Delete this later
+	struct cdev			*cdev; // Used to store character device handlers
+	// Delete this later
 	int		(*newstate)(struct ieee80211vap *, enum ieee80211_state, int);
 };
 
