@@ -568,18 +568,18 @@ athn_usb_detach(device_t self)
 
 	DEBUG_PRINTF("Destroy\n");
 	printf("End of athn_usb_detach\n");
-	return 0;
 #if 0
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)self;
 	struct athn_softc *sc = &usc->sc_sc;
+#endif
 
 	if (usc->sc_athn_attached)
 		athn_detach(sc);
 
 	/* Wait for all async commands to complete. */
-	athn_usb_wait_async(usc);
+//	athn_usb_wait_async(usc);
 
-	usbd_ref_wait(usc->sc_udev);
+//	usbd_ref_wait(usc->sc_udev);
 
 	/* Abort and close Tx/Rx pipes. */
 	athn_usb_close_pipes(usc);
@@ -590,7 +590,6 @@ athn_usb_detach(device_t self)
 	athn_usb_free_rx_list(usc);
 
 	return (0);
-#endif
 }
 
 static void
@@ -907,11 +906,14 @@ athn_usb_close_pipes(struct athn_usb_softc *usc)
 		usc->ibuf = NULL;
 	}
 #endif
+//	athn_usb_free_tx_cmd_list(sc);
+	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
 }
 
 int
 athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 {
+	struct athn_softc *sc = &usc->sc_sc;
 	struct athn_usb_rx_data *data;
 	int i, error = 0;
 
@@ -925,16 +927,14 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 		data->ni = NULL;
 		data->buf = malloc(ATHN_USB_RXBUFSZ, M_USBDEV, M_NOWAIT);
 		if (data->buf == NULL) {
-			printf(": could not allocate xfer buffer\n"); //,
+			device_printf(sc->sc_dev, "could not allocate xfer buffer\n");
 			error = ENOMEM;
 			break;
 		}
 	}
 
-	if (error != 0) {
-		printf("athn_usb_free_rx_list prego\n");
+	if (error != 0)
 		athn_usb_free_rx_list(usc);
-	}
 
 	STAILQ_INIT(&usc->usc_rx_active);
 	STAILQ_INIT(&usc->usc_rx_inactive);
@@ -948,22 +948,23 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 void
 athn_usb_free_rx_list(struct athn_usb_softc *usc)
 {
-	printf("Unimplemented: %s:%d\n", __func__, __LINE__);
-#if 0
+	struct athn_usb_rx_data *data;
 	int i;
 
 	/* NB: Caller must abort pipe first. */
 	for (i = 0; i < ATHN_USB_RX_LIST_COUNT; i++) {
-		if (usc->rx_data[i].xfer != NULL)
-			usbd_free_xfer(usc->rx_data[i].xfer);
-		usc->rx_data[i].xfer = NULL;
+		data = &usc->rx_data[i];
+		if (data->buf != NULL)
+			free(data->buf, M_USBDEV);
+		if (data->ni != NULL)
+			ieee80211_free_node(data->ni);
 	}
-#endif
 }
 
 int
 athn_usb_alloc_tx_list(struct athn_usb_softc *usc)
 {
+	struct athn_softc *sc = &usc->sc_sc;
 	struct athn_usb_tx_data *data;
 	int i, error = 0;
 
@@ -989,7 +990,7 @@ athn_usb_alloc_tx_list(struct athn_usb_softc *usc)
 		// OpenBSD
 		//data->buf = usbd_alloc_buffer(data->xfer, ATHN_USB_TXBUFSZ);
 		if (data->buf == NULL) {
-			printf(": could not allocate xfer buffer\n");
+			device_printf(sc->sc_dev, "could not allocate xfer buffer\n");
 //			printf("%s: could not allocate xfer buffer\n",
 //			    usc->usb_dev.dv_xname);
 			error = ENOMEM;
@@ -1006,6 +1007,15 @@ athn_usb_alloc_tx_list(struct athn_usb_softc *usc)
 void
 athn_usb_free_tx_list(struct athn_usb_softc *usc)
 {
+	struct athn_usb_tx_data *data;
+	int i;
+
+	/* NB: Caller must abort pipe first. */
+	for (i = 0; i < ATHN_USB_TX_LIST_COUNT; i++) {
+		data = &usc->tx_data[i];
+		if (data->buf != NULL)
+			free(data->buf, M_USBDEV);
+	}
 #if 0
 	int i;
 
@@ -1517,7 +1527,7 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 		return (error);
 	}
 	if (rsp.status != AR_HTC_SVC_SUCCESS) {
-		printf(": service %d connection failed, error %d\n",  svc_id, rsp.status);
+		device_printf(sc->sc_dev, "service %d connection failed, error %d\n",  svc_id, rsp.status);
 		return (EIO);
 	}
 //	DPRINTF(("service %d successfully connected to endpoint %d\n",
@@ -3688,7 +3698,7 @@ athn_usb_stop(struct athn_usb_softc *usc)
 	usc->rx_stream.m = NULL;
 	usc->rx_stream.left = 0;
 
-	return 0; // Do error checking elsewhere?
+	return (0); // Do error checking elsewhere?
 }
 
 static device_method_t athn_usb_methods[] = {
