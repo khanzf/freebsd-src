@@ -2973,7 +2973,7 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 	printf("Injected\n");
 //	print_hex(mtod(m, char *), 512);
 	printf("Lengths: %d\n", m->m_len);
-	ieee80211_input_mimo_all(ic, m);
+	ieee80211_input_all(ic, m, 50, -95);
 	printf("Put back input here\n");
 	/* Node is no longer needed. */
 //	ieee80211_release_node(ic, ni);
@@ -3076,15 +3076,17 @@ athn_usb_rxeof(struct athn_usb_rx_data *data, int len, struct mbufq *ml)
 
 		if (__predict_true(pktlen <= MCLBYTES)) {
 			/* Allocate an mbuf to store the next pktlen bytes. */
-			MGETHDR(m, M_NOWAIT, MT_DATA);
+//			MGETHDR(m, M_NOWAIT, MT_DATA);
+			m = m_get2(pktlen, M_NOWAIT, MT_DATA, M_PKTHDR);
 			if (__predict_true(m != NULL)) {
 				m->m_pkthdr.len = m->m_len = pktlen;
 				if (pktlen > MHLEN) {
-					MCLGET(m, M_NOWAIT);
-					if (!(m->m_flags & M_EXT)) {
-						m_free(m);
-						m = NULL;
-					}
+					printf("Lengths: %d %d\n", pktlen, MHLEN);
+//					MCLGET(m, M_NOWAIT);
+//					if (!(m->m_flags & M_EXT)) {
+//						m_free(m);
+//						m = NULL;
+//					}
 				}
 			}
 		} else {	/* Drop frames larger than MCLBYTES. */
