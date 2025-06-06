@@ -2958,7 +2958,7 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 
 //	ieee80211_inputm(ifp, m, ni, &rxi, ml);
 //	print_hex(mtod(m, char *), 512);
-	ieee80211_input_all(ic, m, 50, -95);
+	ieee80211_input_all(ic, m, rs->rs_rssi, AR_USB_DEFAULT_NF);
 	/* Node is no longer needed. */
 //	ieee80211_release_node(ic, ni);
 	return;
