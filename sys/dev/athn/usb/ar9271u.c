@@ -52,5 +52,4 @@ ar9271u_attach(struct athn_usb_softc *usc)
 {
 	struct athn_softc *sc = &usc->sc_sc;
 	sc->fwname = "athn-ar9271fw";
-	printf("Start of ar9271u_attach\n");
 }

@@ -198,15 +198,10 @@ ar5008_attach(struct athn_softc *sc)
 	sc->obs_off = AR_OBS;
 	sc->gpio_input_en_off = AR_GPIO_INPUT_EN_VAL;
 
-	if (!(sc->flags & ATHN_FLAG_PCIE)) {
-		printf("non-pcie\n");
+	if (!(sc->flags & ATHN_FLAG_PCIE))
 		athn_config_nonpcie(sc);
-	}
-	else {
-		printf("pcie\n");
+	else
 		athn_config_pcie(sc);
-		printf("Exits PCIe condition\n");
-	}
 
 	/* Read entire ROM content in memory. */
 	if ((error = ar5008_read_rom(sc)) != 0) {
@@ -1909,8 +1904,6 @@ ar5008_set_rf_mode(struct athn_softc *sc, struct ieee80211_channel *c)
 {
 	uint32_t reg;
 
-	printf("Running ar5008_set_rf_mode %p %p\n", sc, c);
-
 	reg = IEEE80211_IS_CHAN_2GHZ(c) ?
 	    AR_PHY_MODE_DYNAMIC : AR_PHY_MODE_OFDM;
 	if (!AR_SREV_9280_10_OR_LATER(sc)) {
@@ -1922,8 +1915,6 @@ ar5008_set_rf_mode(struct athn_softc *sc, struct ieee80211_channel *c)
 	}
 	AR_WRITE(sc, AR_PHY_MODE, reg);
 	AR_WRITE_BARRIER(sc);
-
-	printf("Returning ar5008_set_rf_mode\n");
 }
 
 static __inline uint32_t
@@ -2672,7 +2663,6 @@ ar5008_hw_init(struct athn_softc *sc, struct ieee80211_channel *c,
 	}
 	AR_WRITE_BARRIER(sc);
 
-	printf("ar5008_hw_init working through...\n");
 	/* Second initialization step (common to all channels). */
 	DPRINTFN(4, ("writing common init vals\n"));
 	for (i = 0; i < ini->ncmregs; i++) {

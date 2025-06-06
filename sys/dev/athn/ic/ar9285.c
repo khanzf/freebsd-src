@@ -148,13 +148,11 @@ ar9285_attach(struct athn_softc *sc)
 	sc->ops.get_spur_chans = ar9285_get_spur_chans;
 //#if NATHN_USB > 0
 	if (AR_SREV_9271(sc)) {
-		printf("Condition 1 %s:%s\n", __FILE__, __func__);
 		sc->cca_min_2g = AR9271_PHY_CCA_MIN_GOOD_VAL_2GHZ;
 		sc->cca_max_2g = AR9271_PHY_CCA_MAX_GOOD_VAL_2GHZ;
 	} else
 //#endif
 	{
-		printf("Condition 2 %s:%s\n", __FILE__, __func__);
 		sc->cca_min_2g = AR9285_PHY_CCA_MIN_GOOD_VAL_2GHZ;
 		sc->cca_max_2g = AR9285_PHY_CCA_MAX_GOOD_VAL_2GHZ;
 	}
@@ -174,7 +172,6 @@ ar9285_attach(struct athn_softc *sc)
 void
 ar9285_setup(struct athn_softc *sc)
 {
-printf("Entering: %s\n", __func__);
 	const struct ar9285_eeprom *eep = sc->eep;
 	uint8_t type;
 
@@ -200,7 +197,6 @@ printf("Entering: %s\n", __func__);
 		else
 			sc->tx_gain = &ar9285_1_2_tx_gain;
 	}
-printf("Exiting: %s\n", __func__);
 }
 
 void
@@ -242,7 +238,6 @@ ar9285_init_from_rom(struct athn_softc *sc, struct ieee80211_channel *c,
 	uint8_t ob[5], db1[5], db2[5];
 	uint8_t txRxAtten;
 
-	printf("Start of ar9285_init_from_rom\n");
 	AR_WRITE(sc, AR_PHY_SWITCH_COM, modal->antCtrlCommon);
 	AR_WRITE(sc, AR_PHY_SWITCH_CHAIN_0, modal->antCtrlChain);
 
@@ -361,7 +356,6 @@ ar9285_init_from_rom(struct athn_softc *sc, struct ieee80211_channel *c,
 		db2[0] = modal->db1_01;
 		db2[1] = db2[2] = db2[3] = db2[4] = db2[0];
 	}
-printf("Set a flag to only do this if USB\n");
 //#if NATHN_USB > 0
 	if (AR_SREV_9271(sc)) {
 		reg = AR_READ(sc, AR9285_AN_RF2G3);
@@ -445,7 +439,6 @@ printf("Set a flag to only do this if USB\n");
 		AR_WRITE(sc, AR_PHY_SETTLING, reg);
 	}
 	AR_WRITE_BARRIER(sc);
-	printf("End of ar9285_init_from_rom\n");
 }
 
 void
