@@ -68,15 +68,6 @@ __FBSDID("$FreeBSD$");
 int debug_knob = 1;
 
 #define DEBUG_PRINTF(format, ...) if (debug_knob == 1) { printf("DEBUG: " format, ##__VA_ARGS__);}
-/*
-void DEBUG_PRINTF(const char *format, ...) {
-	va_list args;
-	va_start(args format);
-	printf("DEBUG :");
-	vprintf(format, args);
-	va_end(args);
-}
-*/
 
 #ifdef ATHN_DEBUG
 int athn_debug = 0;
@@ -221,15 +212,12 @@ struct cfdriver athn_cd = {
 void
 athn_config_ht(struct athn_softc *sc)
 {
-	DEBUG_PRINTF("%s implementing\n", __func__);
 	struct ieee80211com *ic = &sc->sc_ic;
 //	int i, ntxstreams, nrxstreams;
 	int ntxstreams, nrxstreams;
 
-	if ((sc->flags & ATHN_FLAG_11N) == 0) {
-		printf("exit condition\n");
+	if ((sc->flags & ATHN_FLAG_11N) == 0)
 		return;
-	}
 
 	/* Set HT capabilities. */
 	// XXX Guess based on OpenBSD's values
@@ -303,36 +291,22 @@ athn_attach(struct athn_softc *sc)
 	}
 	ATHN_UNLOCK(sc);
 
-	if (AR_SREV_5416(sc) || AR_SREV_9160(sc)) {
+	if (AR_SREV_5416(sc) || AR_SREV_9160(sc))
 		error = ar5416_attach(sc);
-		printf("option %d\n", __LINE__);
-	}
-	else if (AR_SREV_9280(sc)) {
+	else if (AR_SREV_9280(sc))
 		error = ar9280_attach(sc);
-		printf("option %d\n", __LINE__);
-	}
-	else if (AR_SREV_9285(sc)) {
+	else if (AR_SREV_9285(sc))
 		error = ar9285_attach(sc);
-		printf("option %d\n", __LINE__);
-	}
 //#if NATHN_USB > 0
-	else if (AR_SREV_9271(sc)) {
+	else if (AR_SREV_9271(sc))
 		error = ar9285_attach(sc);
-		printf("option %d\n", __LINE__);
 //#endif
-	}
-	else if (AR_SREV_9287(sc)) {
+	else if (AR_SREV_9287(sc))
 		error = ar9287_attach(sc);
-		printf("option %d\n", __LINE__);
-	}
-	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc)) {
+	else if (AR_SREV_9380(sc) || AR_SREV_9485(sc))
 		error = ar9380_attach(sc);
-		printf("option %d\n", __LINE__);
-	}
-	else {
+	else
 		error = ENOTSUP;
-		printf("option %d\n", __LINE__);
-	}
 
 	if (error != 0) {
 		device_printf(sc->sc_dev, "could not attach chip\n");
@@ -358,9 +332,6 @@ debug_knob = 1;
 		sc->bcnbuf = SIMPLEQ_FIRST(&sc->txbufs);
 		SIMPLEQ_REMOVE_HEAD(&sc->txbufs, bf_list);
 #endif
-	}
-	else {
-		printf("not usb\n");
 	}
 
 	if (sc->flags & ATHN_FLAG_RFSILENT) {
@@ -532,7 +503,6 @@ debug_knob = 1;
 	ic->ic_node_free = ??
 	*/
 
-	return 0;
 #if 0
 	ic->ic_node_alloc = athn_node_alloc;
 	ic->ic_newassoc = athn_newassoc;
@@ -550,8 +520,8 @@ debug_knob = 1;
 	athn_radiotap_attach(sc);
 #endif
 
-	return (0);
 #endif
+	return (0);
 }
 
 void
@@ -748,26 +718,15 @@ athn_get_chipid(struct athn_softc *sc)
 		sc->mac_ver = MS(reg, AR_SREV_VERSION2);
 		sc->mac_rev = MS(reg, AR_SREV_REVISION2);
 		/*
-		 * Keeping this here for now, but this may be a mistake to
-		 * assign the BUS here. That should be done in the
-		 * athn_BUS_attach function, not in the BUS-agnostic
-		 * attachment function.
+		 * OpenBSD's equivalent sets sc->flags to PCI or non-PCI based on this
+		 * this register. Not only does it seem mistaken, this should simply be
+		 * assigned during the bus-specific attachment handler. Thus, I removed
+		 * bus determination based on the AR_SREV register.
 		 */
-		if (!(reg & AR_SREV_TYPE2_HOST_MODE)) {
-			printf("Top PCI\n");
-			sc->flags |= ATHN_FLAG_PCIE;
-		} else {
-			printf("Top non-PCI\n");
-		}
 	} else {
 		sc->mac_ver = MS(reg, AR_SREV_VERSION);
 		sc->mac_rev = MS(reg, AR_SREV_REVISION);
-		if (sc->mac_ver == AR_SREV_VERSION_5416_PCIE) {
-			printf("Bottom PCI\n");
-			sc->flags |= ATHN_FLAG_PCIE;
-		} else {
-			printf("Bottom non-PCIe\n");
-		}
+		/* Ditto here too */
 	}
 }
 
@@ -835,7 +794,6 @@ athn_get_rf_name(struct athn_softc *sc)
 int
 athn_reset_power_on(struct athn_softc *sc)
 {
-	DEBUG_PRINTF("start of athn_reset_power_on\n");
 	int ntries;
 
 	/* Locking should be done prior to this point */
@@ -868,8 +826,6 @@ athn_reset_power_on(struct athn_softc *sc)
 		DPRINTF(("RTC not waking up\n"));
 		return (ETIMEDOUT);
 	}
-	DEBUG_PRINTF("ntries was %d\n", ntries);
-	DEBUG_PRINTF("end of athn_reset_power_on\n");
 	return (athn_reset(sc, 0));
 }
 
@@ -916,7 +872,6 @@ athn_reset(struct athn_softc *sc, int cold)
 int
 athn_set_power_awake(struct athn_softc *sc)
 {
-	printf("Start of %s : %d\n", __func__, __LINE__);
 	int ntries, error;
 
 	/* Lock should be done in athn_newstate or athn_usb_attach */
@@ -953,7 +908,6 @@ DEBUG_PRINTF("Times: %d\n", ntries);
 
 	AR_CLRBITS(sc, AR_STA_ID1, AR_STA_ID1_PWR_SAV);
 	AR_WRITE_BARRIER(sc);
-	printf("End of %s : %d\n", __func__, __LINE__);
 	return (0);
 }
 
@@ -966,7 +920,6 @@ DEBUG_PRINTF("Times: %d\n", ntries);
 void
 athn_set_power_sleep(struct athn_softc *sc)
 {
-DEBUG_PRINTF("Enter athn_set_power_sleep!\n");
 	AR_SETBITS(sc, AR_STA_ID1, AR_STA_ID1_PWR_SAV);
 	/* Allow the MAC to go to sleep. */
 	AR_CLRBITS(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN);
@@ -979,7 +932,6 @@ DEBUG_PRINTF("Enter athn_set_power_sleep!\n");
 	if (!AR_SREV_5416(sc) && !AR_SREV_9271(sc))
 		AR_CLRBITS(sc, AR_RTC_RESET, AR_RTC_RESET_EN);
 	AR_WRITE_BARRIER(sc);
-DEBUG_PRINTF("Exit athn_set_power_sleep!\n");
 }
 
 void
@@ -1112,8 +1064,9 @@ static const struct athn_serdes ar_nonpcie_serdes = {
 void
 athn_config_nonpcie(struct athn_softc *sc)
 {
-	printf("Going into athn_config_nonpcie\n");
+	ATHN_LOCK(sc);
 	athn_write_serdes(sc, &ar_nonpcie_serdes);
+	ATHN_UNLOCK(sc);
 }
 
 void
@@ -1402,7 +1355,6 @@ athn_delete_key(struct ieee80211com *ic, struct ieee80211_node *ni,
 void
 athn_led_init(struct athn_softc *sc)
 {
-	DEBUG_PRINTF("athn_led_init\n");
 	struct athn_ops *ops = &sc->ops;
 
 	ops->gpio_config_output(sc, sc->led_pin, AR_GPIO_OUTPUT_MUX_AS_OUTPUT);
@@ -2306,7 +2258,6 @@ void
 athn_init_tx_queues(struct athn_softc *sc)
 {
 	int qid;
-	printf("Start of athn_init_tx_queues\n");
 
 	for (qid = 0; qid < ATHN_QID_COUNT; qid++) {
 		//SIMPLEQ_INIT(&sc->txq[qid].head);
@@ -2365,7 +2316,6 @@ athn_init_tx_queues(struct athn_softc *sc)
 	/* Enable EOL interrupts for all Tx queues except UAPSD. */
 	AR_WRITE(sc, AR_IMR_S1, 0x00df0000);
 	AR_WRITE_BARRIER(sc);
-	printf("End of athn_init_tx_queues\n");
 }
 
 void
@@ -2647,8 +2597,6 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 
 	ops->set_rf_mode(sc, c);
 
-	printf("A quick check: %p\n", ops->set_rf_mode);
-
 	if (sc->flags & ATHN_FLAG_RFSILENT) {
 		/* Check that the radio is not disabled by hardware switch. */
 		reg = ops->gpio_read(sc, sc->rfsilent_pin);
@@ -2822,7 +2770,6 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 #endif
 	AR_WRITE_BARRIER(sc);
 
-	printf("End of athn_hw_reset\n");
 	return (0);
 }
 
@@ -3205,8 +3152,6 @@ athn_updateslot(struct ieee80211com *ic)
 	struct athn_softc *sc = ic->ic_softc;
 	int slot;
 
-	printf("Start of %s\n", __func__);
-
 //	slot = (ic->ic_flags & IEEE80211_F_SHSLOT) ?
 //	    IEEE80211_DUR_DS_SHSLOT : IEEE80211_DUR_DS_SLOT;
 	slot = IEEE80211_GET_SLOTTIME(ic);
@@ -3215,8 +3160,6 @@ athn_updateslot(struct ieee80211com *ic)
 
 	athn_setacktimeout(sc, ic->ic_curchan, slot);
 	athn_setctstimeout(sc, ic->ic_curchan, slot);
-
-	printf("End of %s\n", __func__);
 }
 
 void
@@ -3593,19 +3536,14 @@ athn_parent(struct ieee80211com *ic)
 
 	// Some sort of detatched thingy
 //	if (sc->sc_
-	printf("helkovmr\n");
 
 	if (ic->ic_nrunning > 0) {
-		DEBUG_PRINTF("Top condition\n");
 		if (sc->sc_init(sc) == 0) {
 //		if (athn_usb_init(sc) == 0)
-			DEBUG_PRINTF("ieee80211_start_all\n");
 			ieee80211_start_all(ic);
 		}
-		else {
-			DEBUG_PRINTF("ieee80211_stop_all\n");
+		else
 			ieee80211_stop_all(ic);
-		}
 	} else {
 		athn_stop(sc);
 	}
