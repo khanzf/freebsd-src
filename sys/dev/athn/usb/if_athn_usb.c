@@ -2632,7 +2632,7 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 
 	if (!(cmd_id & AR_WMI_EVT_FLAG)) {
 		if (usc->wait_cmd_id != cmd_id) {
-			printf("errir, fiz me\n");
+			printf("error, fix me\n");
 			return;	/* Unexpected reply. */
 		}
 		if (usc->obuf != NULL) {
@@ -2870,44 +2870,31 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 	struct ar_rx_status *rs;
 	uint16_t datalen;
 
-	printf("Start of athn_usb_rx_frame\n");
-
-	if (__predict_false(m->m_len < sizeof(*htc))) {
-		printf("Skip 1\n");
+	if (__predict_false(m->m_len < sizeof(*htc)))
 		goto skip;
-	}
 	htc = mtod(m, struct ar_htc_frame_hdr *);
 	if (__predict_false(htc->endpoint_id == 0)) {
 		DPRINTF(("bad endpoint %d\n", htc->endpoint_id));
-		printf("Skip 2\n");
 		goto skip;
 	}
 	if (htc->flags & AR_HTC_FLAG_TRAILER) {
-		if (m->m_len < htc->control[0]) {
-			printf("Skip 3\n");
+		if (m->m_len < htc->control[0])
 			goto skip;
-		}
 		m_adj(m, -(int)htc->control[0]);
 	}
 	m_adj(m, sizeof(*htc));	/* Strip HTC header. */
 
-	if (__predict_false(m->m_len < sizeof(*rs))) {
-		printf("Skip 4\n");
+	if (__predict_false(m->m_len < sizeof(*rs)))
 		goto skip;
-	}
 	rs = mtod(m, struct ar_rx_status *);
 
 	/* Make sure that payload fits. */
 	datalen = htobe16(rs->rs_datalen);
-	if (__predict_false(m->m_len < sizeof(*rs) + datalen)) {
-		printf("Skip 5\n");
+	if (__predict_false(m->m_len < sizeof(*rs) + datalen))
 		goto skip;
-	}
 
-	if (__predict_false(datalen < sizeof(*wh) + IEEE80211_CRC_LEN)) {
-		printf("Skip 6\n");
+	if (__predict_false(datalen < sizeof(*wh) + IEEE80211_CRC_LEN))
 		goto skip;
-	}
 
 #if 0
 	if (rs->rs_status != 0) {
@@ -2917,7 +2904,7 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 		goto skip;
 	}
 #else
-	printf("Need to complete this\n");
+//	printf("Need to complete this\n");
 #endif
 	m_adj(m, sizeof(*rs));	/* Strip Rx status. */
 
@@ -2940,7 +2927,7 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 		athn_usb_rx_radiotap(sc, m, rs);
 #endif
 #else
-	printf("Re-implement this later\n");
+//	printf("Re-implement this later\n");
 #endif
 	/* Trim 802.11 FCS after radiotap. */
 	m_adj(m, -IEEE80211_CRC_LEN);
@@ -2966,15 +2953,12 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 		rxi.rxi_flags |= IEEE80211_RXI_HWDEC;
 	}
 #else
-	printf("Uncompleted code\n");
+//	printf("Uncompleted code\n");
 #endif
 
 //	ieee80211_inputm(ifp, m, ni, &rxi, ml);
-	printf("Injected\n");
 //	print_hex(mtod(m, char *), 512);
-	printf("Lengths: %d\n", m->m_len);
 	ieee80211_input_all(ic, m, 50, -95);
-	printf("Put back input here\n");
 	/* Node is no longer needed. */
 //	ieee80211_release_node(ic, ni);
 	return;
@@ -3033,8 +3017,6 @@ athn_usb_rxeof(struct athn_usb_rx_data *data, int len, struct mbufq *ml)
 */
 //	usbd_get_xfer_status(xfer, NULL, NULL, &len, NULL);
 
-	printf("Start of athn_usb_rxeof\n");
-
 	if (stream->left > 0) {
 		if (len >= stream->left) {
 			/* We have all our pktlen bytes now. */
@@ -3057,14 +3039,11 @@ athn_usb_rxeof(struct athn_usb_rx_data *data, int len, struct mbufq *ml)
 				stream->moff += len;
 			}
 			stream->left -= len;
-			printf("resubmit %d\n", __LINE__);
 			goto resubmit;
 		}
 	}
-	KASSERT(stream->left == 0, "stream->left is not 0");
-	printf("Len: %d sizeof(*hdr) %lu\n", len, sizeof(*hdr));
+	KASSERT(stream->left == 0, ("stream->left is not 0"));
 	while (len >= sizeof(*hdr)) {
-		printf("Enter while loop\n");
 		hdr = (struct ar_stream_hdr *)buf;
 		if (hdr->tag != htole16(AR_USB_RX_STREAM_TAG)) {
 			DPRINTF(("invalid tag 0x%x\n", hdr->tag));
@@ -3081,7 +3060,6 @@ athn_usb_rxeof(struct athn_usb_rx_data *data, int len, struct mbufq *ml)
 			if (__predict_true(m != NULL)) {
 				m->m_pkthdr.len = m->m_len = pktlen;
 				if (pktlen > MHLEN) {
-					printf("Lengths: %d %d\n", pktlen, MHLEN);
 //					MCLGET(m, M_NOWAIT);
 //					if (!(m->m_flags & M_EXT)) {
 //						m_free(m);
@@ -3089,9 +3067,8 @@ athn_usb_rxeof(struct athn_usb_rx_data *data, int len, struct mbufq *ml)
 //					}
 				}
 			}
-		} else {	/* Drop frames larger than MCLBYTES. */
+		} else	/* Drop frames larger than MCLBYTES. */
 			m = NULL;
-		}
 
 //		if (m == NULL)
 //			ifp->if_ierrors++;
@@ -3108,7 +3085,6 @@ athn_usb_rxeof(struct athn_usb_rx_data *data, int len, struct mbufq *ml)
 				stream->moff = len;
 			}
 			stream->left = pktlen - len;
-			printf("resubmit %d\n", __LINE__);
 			goto resubmit;
 		}
 		if (__predict_true(m != NULL)) {
@@ -3121,7 +3097,6 @@ athn_usb_rxeof(struct athn_usb_rx_data *data, int len, struct mbufq *ml)
 		off = (pktlen + 3) & ~3;
 		buf += off;
 		len -= off;
-		printf("End of while loop\n");
 	} // end of while loop
 //	if_input(ifp, &ml);
 
@@ -3131,7 +3106,6 @@ athn_usb_rxeof(struct athn_usb_rx_data *data, int len, struct mbufq *ml)
 //	    ATHN_USB_RXBUFSZ, USBD_SHORT_XFER_OK | USBD_NO_COPY,
 //	    USBD_NO_TIMEOUT, athn_usb_rxeof);
 //	(void)usbd_transfer(xfer);
-	printf("Returning from athn_usb_rxeof\n");
 	return;
 }
 
@@ -3520,8 +3494,6 @@ printf("Welcome to athn_usb_init\n");
 
 	mode = htobe16(IEEE80211_IS_CHAN_2GHZ(c) ?
 	    AR_HTC_MODE_11NG : AR_HTC_MODE_11NA);
-	printf("mode is %d %x\n", mode, mode);
-	// Hard-coding in AR_HTC_MODE_11NA
 
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_SET_MODE,
 	    &mode, sizeof(mode), NULL);
