@@ -521,6 +521,7 @@ athn_attach(struct athn_softc *sc)
 #endif
 
 #endif
+
 	return (0);
 }
 
@@ -3460,10 +3461,13 @@ athn_drain_mbufq(struct athn_softc *sc)
 	}
 }
 
+/* This appears to be a PCI-specific function */
 void
 athn_stop(struct athn_softc *sc)
 {
 	printf("%s unimplemented...\n", __func__);
+	printf("This (athn_stop) should not be called, this is a PCI-specific function.\n");
+#if 0
 //	struct athn_softc *sc = ifp->if_softc;
 //	struct ieee80211com *ic = &sc->sc_ic;
 	int qid, i;
@@ -3479,6 +3483,9 @@ athn_stop(struct athn_softc *sc)
 	ATHN_UNLOCK(sc);
 
 	// Both moved to the bottom
+	ATHN_LOCK(sc);
+	athn_drain_mbufq(sc); // Drains sc_snd
+	ATHN_UNLOCK(sc);
 //	ifq_clr_oactive(&ifp->if_snd);
 //	timeout_del(&sc->scan_to);
 
@@ -3542,10 +3549,10 @@ athn_stop(struct athn_softc *sc)
 
 	// Clear sc_snd queue
 	ATHN_LOCK(sc);
-	athn_drain_mbufq(sc); // Drains sc_snd
 	callout_drain(&sc->scan_to);
 	callout_drain(&sc->calib_to);
 	ATHN_UNLOCK(sc);
+#endif
 }
 
 static void
@@ -3561,7 +3568,10 @@ athn_parent(struct ieee80211com *ic)
 		else
 			ieee80211_stop_all(ic);
 	} else {
-		athn_stop(sc);
+		// PCI will call athn_stop, perhaps should make this a function pointer
+		// ie, sc->sc_stop
+		sc->sc_stop(sc);
+	//	athn_usb_stop(sc);
 	}
 }
 
