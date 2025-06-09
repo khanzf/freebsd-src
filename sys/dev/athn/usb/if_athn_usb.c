@@ -589,6 +589,8 @@ athn_usb_detach(device_t self)
 	athn_usb_free_tx_list(usc);
 	athn_usb_free_rx_list(usc);
 
+	printf("end of destroy\n");
+
 	return (0);
 }
 
@@ -714,19 +716,22 @@ athn_usb_attachhook(device_t self)
 	usc->sc_athn_attached = 1;
 	/* Override some operations for USB. */
 
+
 	// Attach VAP-specific "stuff"
 	ic->ic_vap_create = athn_usb_vap_create;
 	ic->ic_vap_delete = athn_usb_vap_delete; // Not finished
 //	ic->ic_ioctl = athn_usb_ioctl;
 //	ifp->if_start = athn_usb_start;
 //	ifp->if_watchdog = athn_usb_watchdog;
-	ic->ic_node_alloc = athn_usb_node_alloc;
-//	usc->sc_node_free = ic->ic_node_free;		// No OpenBSD equivalent?
-	ic->ic_node_free = athn_usb_node_free;		// No OpenBSD equivalent?
 //	ic->ic_newauth = athn_usb_newauth;
 	ic->ic_newassoc = athn_usb_newassoc;
 //	ic->ic_updateslot = athn_usb_updateslot;	
 //	ic->ic_updateedca = athn_usb_updateedca;
+
+	ic->ic_node_alloc = athn_usb_node_alloc;
+
+	usc->node_free = ic->ic_node_free;
+	ic->ic_node_free = athn_usb_node_free;
 
 //	vp->vp_set_key = athn_usb_set_key;
 //	vp->vp_delete_key = athn_usb_delete_key;	// For VAP
@@ -1096,32 +1101,37 @@ athn_cmdq_cb(void *arg, int pending)
 #endif
 }
 
+/* Might move this to athn_do_async */
 void
 athn_usb_do_async(struct athn_usb_softc *usc,
     void (*cb)(struct athn_usb_softc *, void *), void *arg, int len)
 {
-#if 0
+	struct athn_softc *sc = (struct athn_softc *)usc;
 	struct athn_usb_host_cmd_ring *ring = &usc->cmdq;
 	struct athn_usb_host_cmd *cmd;
-	int s;
+
+	ATHN_CMDQ_LOCK(sc);
+
+	printf("Comes to athn_usb_do_async...verify\n");
 
 	if (ring->queued == ATHN_USB_HOST_CMD_RING_COUNT) {
-		printf("%s: host cmd queue overrun\n", usc->usb_dev.dv_xname);
+		device_printf(sc->sc_dev, "host cmd queue overrun\n");
 		return;	/* XXX */
 	}
 	
-	s = splusb();
 	cmd = &ring->cmd[ring->cur];
 	cmd->cb = cb;
-	KASSERT(len <= sizeof(cmd->data));
+	KASSERT(len <= sizeof(cmd->data), ("athn_usb_do_async received overflow data size"));
 	memcpy(cmd->data, arg, len);
 	ring->cur = (ring->cur + 1) % ATHN_USB_HOST_CMD_RING_COUNT;
 
+	ATHN_CMDQ_UNLOCK(sc);
+
 	/* If there is no pending command already, schedule a task. */
 	if (++ring->queued == 1)
-		usb_add_task(usc->sc_udev, &usc->sc_task);
-	splx(s);
-#endif
+		ieee80211_runtask(&sc->sc_ic, &usc->usc_task);
+//		usb_add_task(usc->sc_udev, &usc->sc_task);
+
 }
 
 void
@@ -1551,6 +1561,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_wmi_cmd_hdr *wmi;
+	char *cmd_str;
 	int error;
 
 	DEBUG_PRINTF("athn_usb_wmi_xcmd cmd_id = %d\n", cmd_id);
@@ -1610,8 +1621,108 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 //	    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
 	if (error) {
 		if (error == EWOULDBLOCK) {
-			if (cmd_id != 0x15)
-				device_printf(sc->sc_dev, "firmware command 0x%x timed out\n", cmd_id);
+			switch(cmd_id) {
+			case AR_WMI_CMD_ECHO:
+				cmd_str = "AR_WMI_CMD_ECHO";
+				break;
+			case AR_WMI_CMD_ACCESS_MEMORY:
+				cmd_str = "AR_WMI_CMD_ACCESS_MEMORY";
+				break;
+			case AR_WMI_GET_FW_VERSION:
+				cmd_str = "AR_WMI_GET_FW_VERSION";
+				break;
+			case AR_WMI_CMD_DISABLE_INTR:
+				cmd_str = "AR_WMI_CMD_DISABLE_INTR";
+				break;
+			case AR_WMI_CMD_ENABLE_INTR:
+				cmd_str = "AR_WMI_CMD_ENABLE_INTR";
+				break;
+			case AR_WMI_CMD_ATH_INIT:
+				cmd_str = "AR_WMI_CMD_ATH_INIT";
+				break;
+			case AR_WMI_CMD_ABORT_TXQ:
+				cmd_str = "AR_WMI_CMD_ABORT_TXQ";
+				break;
+			case AR_WMI_CMD_STOP_TX_DMA:
+				cmd_str = "AR_WMI_CMD_STOP_TX_DMA";
+				break;
+			case AR_WMI_CMD_ABORT_TX_DMA:
+				cmd_str = "AR_WMI_CMD_ABORT_TX_DMA";
+				break;
+			case AR_WMI_CMD_DRAIN_TXQ:
+				cmd_str = "AR_WMI_CMD_DRAIN_TXQ";
+				break;
+			case AR_WMI_CMD_DRAIN_TXQ_ALL:
+				cmd_str = "AR_WMI_CMD_DRAIN_TXQ_ALL";
+				break;
+			case AR_WMI_CMD_START_RECV:
+				cmd_str = "AR_WMI_CMD_START_RECV";
+				break;
+			case AR_WMI_CMD_STOP_RECV:
+				cmd_str = "AR_WMI_CMD_STOP_RECV";
+				break;
+			case AR_WMI_CMD_FLUSH_RECV:
+				cmd_str = "AR_WMI_CMD_FLUSH_RECV";
+				break;
+			case AR_WMI_CMD_SET_MODE:
+				cmd_str = "AR_WMI_CMD_SET_MODE";
+				break;
+			case AR_WMI_CMD_NODE_CREATE:
+				cmd_str = "AR_WMI_CMD_NODE_CREATE";
+				break;
+			case AR_WMI_CMD_NODE_REMOVE:
+				cmd_str = "AR_WMI_CMD_NODE_REMOVE";
+				break;
+			case AR_WMI_CMD_VAP_REMOVE:
+				cmd_str = "AR_WMI_CMD_VAP_REMOVE";
+				break;
+			case AR_WMI_CMD_VAP_CREATE:
+				cmd_str = "AR_WMI_CMD_VAP_CREATE";
+				break;
+			case AR_WMI_CMD_REG_READ:
+				cmd_str = "AR_WMI_CMD_REG_READ";
+				break;
+			case AR_WMI_CMD_REG_WRITE:
+				cmd_str = "AR_WMI_CMD_REG_WRITE";
+				break;
+			case AR_WMI_CMD_RC_STATE_CHANGE:
+				cmd_str = "AR_WMI_CMD_RC_STATE_CHANGE";
+				break;
+			case AR_WMI_CMD_RC_RATE_UPDATE:
+				cmd_str = "AR_WMI_CMD_RC_RATE_UPDATE";
+				break;
+			case AR_WMI_CMD_TARGET_IC_UPDATE:
+				cmd_str = "AR_WMI_CMD_TARGET_IC_UPDATE";
+				break;
+			case AR_WMI_CMD_TX_AGGR_ENABLE:
+				cmd_str = "AR_WMI_CMD_TX_AGGR_ENABLE";
+				break;
+			case AR_WMI_CMD_TGT_DETACH:
+				cmd_str = "AR_WMI_CMD_TGT_DETACH";
+				break;
+			case AR_WMI_CMD_NODE_UPDATE:
+				cmd_str = "AR_WMI_CMD_NODE_UPDATE";
+				break;
+			case AR_WMI_CMD_INT_STATS:
+				cmd_str = "AR_WMI_CMD_INT_STATS";
+				break;
+			case AR_WMI_CMD_TX_STATS:
+				cmd_str = "AR_WMI_CMD_TX_STATS";
+				break;
+			case AR_WMI_CMD_RX_STATS:
+				cmd_str = "AR_WMI_CMD_RX_STATS";
+				break;
+			case AR_WMI_CMD_BITRATE_MASK:
+				cmd_str = "AR_WMI_CMD_BITRATE_MASK";
+				break;
+			case AR_WMI_CMD_REG_RMW:
+				cmd_str = "AR_WMI_CMD_REG_RMW";
+				break;
+			default:
+				cmd_str = "unknown";
+				break;
+			}
+			device_printf(sc->sc_dev, "firmware command time out: %s (0x%x)\n", cmd_str, cmd_id);
 			error = ETIMEDOUT;
 		}
 	}
@@ -1918,7 +2029,6 @@ struct ieee80211_node *
 athn_usb_node_alloc(struct ieee80211vap *vap, const uint8_t mac[IEEE80211_ADDR_LEN])
 {
 	struct athn_node *an;
-	printf("%s executed\n", __func__);
 
 	an = malloc(sizeof(struct athn_node), M_80211_NODE, M_NOWAIT | M_ZERO);
 	if (an == NULL) {
@@ -2032,8 +2142,7 @@ athn_usb_newauth(struct ieee80211com *ic, struct ieee80211_node *ni,
 void
 athn_usb_node_free(struct ieee80211_node *ni)
 {
-	printf("%s unimplemented.\n", __func__);
-#if 0
+	struct ieee80211com *ic = ni->ni_ic;
 	struct athn_usb_softc *usc = ic->ic_softc;
 	struct athn_node *an = (struct athn_node *)ni;
 
@@ -2044,8 +2153,7 @@ athn_usb_node_free(struct ieee80211_node *ni)
 	if (an->sta_index != 0)
 		athn_usb_do_async(usc, athn_usb_node_free_cb,
 		    &an->sta_index, sizeof(an->sta_index));
-	usc->sc_node_free(ic, ni);
-#endif
+	usc->node_free(ni);
 }
 
 void
@@ -2637,7 +2745,6 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 	if (__predict_false(len < sizeof(*wmi)))
 		return;
 	wmi = (struct ar_wmi_cmd_hdr *)buf;
-//	cmd_id = betoh16(wmi->cmd_id);
 	cmd_id = be16toh(wmi->cmd_id);
 
 	if (!(cmd_id & AR_WMI_EVT_FLAG)) {
@@ -3586,7 +3693,10 @@ printf("Welcome to athn_usb_init\n");
 	/* Queue Rx xfers. */
 	usbd_transfer_start(usc->usc_xfer[ATHN_RX_DATA]);
 
+	/* We're ready to go. */
 	sc->sc_running = 1;
+
+	printf("Stuff below this needs to be updated...\n");
 	ATHN_UNLOCK(sc);
 	return (0);
 #if 0
