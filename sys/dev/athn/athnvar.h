@@ -631,6 +631,7 @@ struct athn_softc {
 	int				(*sc_key_set)(struct ieee80211vap *, const struct ieee80211_key *);
 	int				(*sc_init)(struct athn_softc *);
 	struct mbufq 	sc_snd;
+	void			(*sc_stop)(struct athn_softc *);
 
 	/* Firmware-specific */
 	const char		*fwname;
