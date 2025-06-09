@@ -210,7 +210,7 @@ void		athn_usb_start(struct ifnet *);
 void		athn_usb_watchdog(struct ifnet *);
 int		athn_usb_ioctl(struct ieee80211com *, u_long, void *);
 int		athn_usb_init(struct athn_softc *);
-static int		athn_usb_stop(struct athn_usb_softc *);
+void		athn_usb_stop(struct athn_softc *);
 void		ar9271_load_ani(struct athn_softc *);
 int		ar5008_ccmp_decap(struct athn_softc *, struct mbuf *,
 		    struct ieee80211_node *);
@@ -708,6 +708,7 @@ athn_usb_attachhook(device_t self)
 	/* We're now ready to attach the bus agnostic driver. */
 	sc->sc_key_delete = athn_usb_delete_key;
 	sc->sc_key_set = athn_usb_set_key;
+	sc->sc_stop = athn_usb_stop;
 
 	error = athn_attach(sc);
 	if (error != 0) {
@@ -740,6 +741,7 @@ athn_usb_attachhook(device_t self)
 #ifdef notyet
 	ic->ic_ampdu_tx_start = athn_usb_ampdu_tx_start;	// For VAP
 	ic->ic_ampdu_tx_stop = athn_usb_ampdu_tx_stop;		// For VAP
+	sc->sc_stop = athn_usb_stop;
 #endif
 //	ic->ic_newstate = athn_usb_newstate;
 #if 0
@@ -3727,28 +3729,30 @@ printf("Welcome to athn_usb_init\n");
 static int
 athn_usb_suspend(device_t self)
 {
+#if 0
 	int error;
 	struct athn_usb_softc *usc = device_get_softc(self);
 	// Transparent handler
-	error = athn_usb_stop(usc);
+	error = athn_usb_stop(sc);
 
 	return (error);
+#endif
+	printf("Currently athn_usb_suspend disabled\n");
+	return 1;
 }
 
 
-static int
-athn_usb_stop(struct athn_usb_softc *usc)
+void
+athn_usb_stop(struct athn_softc *sc)
 {
 	DEBUG_PRINTF("%s unimplemented.\n", __func__);
-	struct athn_softc *sc = &usc->sc_sc;
-//	struct athn_softc *sc = ifp->if_softc;
-//	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
+	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ar_htc_target_vif hvif;
 	uint8_t sta_index;
 //	int s;
 
-	DEBUG_PRINTF("This needs to be fixed!\n");
+	printf("Calling athn_usb_stop\n");
 	/*
 	sc->sc_tx_timer = 0;
 	ifp->if_timer = 0;
@@ -3760,55 +3764,72 @@ athn_usb_stop(struct athn_usb_softc *usc)
 //	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
 
 	/* Wait for all async commands to complete. */
-	athn_usb_wait_async(usc);
 
+	ATHN_LOCK(sc);
+	athn_usb_wait_async(usc);
+	ATHN_UNLOCK(sc);
+
+	ATHN_LOCK(sc);
 	callout_stop(&sc->scan_to);
 	callout_stop(&sc->calib_to);
+	ATHN_UNLOCK(sc);
 
 	/* Remove all non-default nodes. */
+	ATHN_LOCK(sc);
 	for (sta_index = 1; sta_index < AR_USB_MAX_STA; sta_index++) {
 		if (usc->free_node_slots & (1 << sta_index))
 			continue;
 		(void)athn_usb_wmi_xcmd(usc, AR_WMI_CMD_NODE_REMOVE,
 		    &sta_index, sizeof(sta_index), NULL);
 	}
+	ATHN_UNLOCK(sc);
 
 	/* Remove main interface. This also invalidates our default node. */
 	memset(&hvif, 0, sizeof(hvif));
 	hvif.index = 0;
 	IEEE80211_ADDR_COPY(hvif.myaddr, ic->ic_macaddr);
+	ATHN_LOCK(sc);
 	(void)athn_usb_wmi_xcmd(usc, AR_WMI_CMD_VAP_REMOVE,
 	    &hvif, sizeof(hvif), NULL);
+	ATHN_UNLOCK(sc);
 
 	usc->free_node_slots = 0xff;
 
+	ATHN_LOCK(sc);
 	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_DISABLE_INTR);
 	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_DRAIN_TXQ_ALL);
 	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_STOP_RECV);
+	ATHN_UNLOCK(sc);
 
+	ATHN_LOCK(sc);
 	athn_reset(sc, 0);
 	athn_init_pll(sc, NULL);
 	athn_set_power_awake(sc);
 	athn_reset(sc, 1);
 	athn_init_pll(sc, NULL);
 	athn_set_power_sleep(sc);
+	ATHN_UNLOCK(sc);
 
 	/* Abort Tx/Rx. */
 //	usbd_abort_pipe(usc->tx_data_pipe);
 //	usbd_abort_pipe(usc->rx_data_pipe);
+	ATHN_LOCK(sc);
 	usbd_transfer_stop(usc->usc_xfer[ATHN_TX_DATA]);
 	usbd_transfer_stop(usc->usc_xfer[ATHN_RX_DATA]);
+	ATHN_UNLOCK(sc);
 
 	/* Free Tx/Rx buffers. */
+	ATHN_LOCK(sc);
 	athn_usb_free_tx_list(usc);
 	athn_usb_free_rx_list(usc);
+	ATHN_UNLOCK(sc);
 
 	/* Flush Rx stream. */
 	m_freem(usc->rx_stream.m);
 	usc->rx_stream.m = NULL;
 	usc->rx_stream.left = 0;
 
-	return (0); // Do error checking elsewhere?
+//	return (0); // Do error checking elsewhere?
 }
 
 static device_method_t athn_usb_methods[] = {
