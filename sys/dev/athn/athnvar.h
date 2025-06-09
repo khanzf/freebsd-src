@@ -451,7 +451,10 @@ struct athn_softc {
 	struct ieee80211com		sc_ic;
 
 	int				(*sc_enable)(struct athn_softc *);
+// Currently not supporting cardbus (PCMCIA)
+#if 0
 	void				(*sc_disable)(struct athn_softc *);
+#endif
 	void				(*sc_power)(struct athn_softc *, int);
 	void				(*sc_disable_aspm)(struct athn_softc *);
 	void				(*sc_enable_extsynch)(
@@ -551,7 +554,7 @@ struct athn_softc {
 	bus_dmamap_t			map;
 	bus_dma_segment_t		seg;
 #endif
-	//LIST_HEAD(, athn_tx_buf)	txbufs;
+	STAILQ_HEAD(, athn_tx_buf) txbufs;
 	struct athn_tx_buf		*bcnbuf;
 	struct athn_tx_buf		txpool[ATHN_NTXBUFS];
 
@@ -627,6 +630,7 @@ struct athn_softc {
 	int				(*sc_key_delete)(struct ieee80211vap *, const struct ieee80211_key *);
 	int				(*sc_key_set)(struct ieee80211vap *, const struct ieee80211_key *);
 	int				(*sc_init)(struct athn_softc *);
+	struct mbufq 	sc_snd;
 
 	/* Firmware-specific */
 	const char		*fwname;
@@ -645,6 +649,9 @@ extern int	athn_intr(void *);
 /* FreeBSD Additions */
 #define ATHN_CMDQ_LOCK_INIT(sc) \
 	mtx_init(&(sc)->cmdq_mtx, "cmdq lock", NULL, MTX_DEF)
+#define ATHN_CMDQ_LOCK(sc)			mtx_lock(&(sc)->cmdq_mtx)
+#define ATHN_CMDQ_UNLOCK(sc)		mtx_unlock(&(sc)->cmdq_mtx)
+#define ATHN_CMDQ_LOCK_DESTROY(sc)	mtx_destroy(&(sc)->cmdq_mtx)
 
 struct athn_vap {
 	struct ieee80211vap vap;
