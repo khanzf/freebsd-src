@@ -169,7 +169,7 @@ void		athn_set_multi(struct athn_softc *);
 int		athn_ioctl(struct ifnet *, u_long, caddr_t);
 static void athn_parent(struct ieee80211com *);
 int		athn_init(struct athn_softc *);
-void		athn_stop(void *arg);
+void		athn_stop(struct athn_softc *);
 void		athn_init_tx_queues(struct athn_softc *);
 int32_t		athn_ani_get_rssi(struct athn_softc *);
 void		athn_ani_ofdm_err_trigger(struct athn_softc *);
@@ -202,6 +202,7 @@ void	athn_getradiocaps(struct ieee80211com *ic,
 			int maxchans, int *nchans, struct ieee80211_channel chans[]);
 void	athn_scan_start(struct ieee80211com *ic);
 void	athn_scan_end(struct ieee80211com *ic);
+void	athn_drain_mbufq(struct athn_softc *);
 
 #if 0
 struct cfdriver athn_cd = {
@@ -313,7 +314,6 @@ athn_attach(struct athn_softc *sc)
 		return (error);
 	}
 
-debug_knob = 1;
 	/* We can put the chip in sleep state now. */
 	ATHN_LOCK(sc);
 	athn_set_power_sleep(sc);
@@ -321,7 +321,6 @@ debug_knob = 1;
 
 	if (!(sc->flags & ATHN_FLAG_USB)) {
 		printf("if usb?!\n");
-#if 0
 		error = sc->ops.dma_alloc(sc);
 		if (error != 0) {
 			printf("%s: could not allocate DMA resources\n",
@@ -329,9 +328,8 @@ debug_knob = 1;
 			return (error);
 		}
 		/* Steal one Tx buffer for beacons. */
-		sc->bcnbuf = SIMPLEQ_FIRST(&sc->txbufs);
-		SIMPLEQ_REMOVE_HEAD(&sc->txbufs, bf_list);
-#endif
+		sc->bcnbuf = STAILQ_FIRST(&sc->txbufs);
+		STAILQ_REMOVE_HEAD(&sc->txbufs, bf_list);
 	}
 
 	if (sc->flags & ATHN_FLAG_RFSILENT) {
@@ -385,6 +383,8 @@ debug_knob = 1;
 	// FreeBSD's callout_init equivalent just creates the structure
 	callout_init(&sc->scan_to, 0);
 	callout_init(&sc->calib_to, 0);
+
+	mbufq_init(&sc->sc_snd, ifqmaxlen);
 
 #if 0 // Not used om FreeBSD
 	sc->amrr.amrr_min_success_threshold =  1;
@@ -484,8 +484,6 @@ debug_knob = 1;
 	ic->ic_transmit = ??
 	*/
 	ic->ic_parent = athn_parent;
-			/*
-	*/
 //	ic->ic_vap_create = athn_vap_create;
 //	ic->ic_vap_delete = athn_vap_delete; // Not finished
 	/*
@@ -498,6 +496,8 @@ debug_knob = 1;
 	*/
 //	ic->ic_node_alloc = athn_node_alloc;
 //	ic->ic_newassoc = athn_newassoc;
+
+	// This is being moved to athn_BUS_attach
 	/*
 	sc->sc_node_free = ic->ic_node_free;
 	ic->ic_node_free = ??
@@ -2106,9 +2106,6 @@ athn_inc_tx_trigger_level(struct athn_softc *sc)
 int
 athn_stop_rx_dma(struct athn_softc *sc)
 {
-	printf("%s unimplemented...\n", __func__);
-	return 1;
-#if 0
 	int ntries;
 
 	AR_WRITE(sc, AR_CR, AR_CR_RXD);
@@ -2119,8 +2116,8 @@ athn_stop_rx_dma(struct athn_softc *sc)
 		DELAY(100);
 	}
 	DPRINTF(("Rx DMA failed to stop\n"));
+	printf("Rx DMA failed to stop\n");
 	return (ETIMEDOUT);
-#endif
 }
 
 int
@@ -2147,15 +2144,14 @@ athn_rx_abort(struct athn_softc *sc)
 void
 athn_tx_reclaim(struct athn_softc *sc, int qid)
 {
-	printf("%s unimplemented...\n", __func__);
-#if 0
 	struct athn_txq *txq = &sc->txq[qid];
 	struct athn_tx_buf *bf;
 
 	/* Reclaim all buffers queued in the specified Tx queue. */
 	/* NB: Tx DMA must be stopped. */
-	while ((bf = SIMPLEQ_FIRST(&txq->head)) != NULL) {
-		SIMPLEQ_REMOVE_HEAD(&txq->head, bf_list);
+	while ((bf = STAILQ_FIRST(&txq->head)) != NULL) {
+#if 0
+		STAILQ_REMOVE_HEAD(&txq->head, bf_list);
 
 		bus_dmamap_sync(sc->sc_dmat, bf->bf_map, 0,
 		    bf->bf_map->dm_mapsize, BUS_DMASYNC_POSTWRITE);
@@ -2165,9 +2161,11 @@ athn_tx_reclaim(struct athn_softc *sc, int qid)
 		bf->bf_ni = NULL;	/* Nodes already freed! */
 
 		/* Link Tx buffer back to global free list. */
-		SIMPLEQ_INSERT_TAIL(&sc->txbufs, bf, bf_list);
-	}
+		STAILQ_INSERT_TAIL(&sc->txbufs, bf, bf_list);
+#else
+	printf("athn_tx_reclaim DMA loop\n");
 #endif
+	}
 }
 
 int
@@ -2180,10 +2178,10 @@ athn_tx_pending(struct athn_softc *sc, int qid)
 void
 athn_stop_tx_dma(struct athn_softc *sc, int qid)
 {
-	printf("%s unimplemented...\n", __func__);
-#if 0
 	uint32_t tsflo;
 	int ntries, i;
+
+	ATHN_LOCK_ASSERT(sc);
 
 	AR_WRITE(sc, AR_Q_TXD, 1 << qid);
 	for (ntries = 0; ntries < 40; ntries++) {
@@ -2218,7 +2216,6 @@ athn_stop_tx_dma(struct athn_softc *sc, int qid)
 	}
 	AR_WRITE(sc, AR_Q_TXD, 0);
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 int
@@ -2546,8 +2543,6 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 	struct athn_ops *ops = &sc->ops;
 	uint32_t reg, def_ant, sta_id1, cfg_led, tsflo, tsfhi;
 	int i, error;
-
-	printf("working through %s\n", __func__);
 
 	/* XXX not if already awake */
 	if ((error = athn_set_power_awake(sc)) != 0) {
@@ -3368,7 +3363,7 @@ int
 athn_init(struct athn_softc *sc)
 {
 	//struct athn_ops *ops = &sc->ops;
-	struct ieee80211com *ic = &sc->sc_ic;
+//	struct ieee80211com *ic = &sc->sc_ic;
 //	struct ieee80211_channel *c, *extc;
 //	struct ieee80211_channel *c;
 	int error = 0;
@@ -3379,20 +3374,7 @@ athn_init(struct athn_softc *sc)
 //	extc = NULL;
 
 	/* In case a new MAC address has been configured. */
-printf("welcome to athn_init\n");
-	/* For CardBus, power on the socket. */
-	if (sc->sc_enable != NULL) {
-		printf("sc_enable not NULL\n");
-		if ((error = sc->sc_enable(sc)) != 0) {
-			printf("%s: could not enable device\n", ic->ic_name);
-			goto fail;
-		}
-		if ((error = athn_reset_power_on(sc)) != 0) {
-			printf("%s: could not power on device\n", ic->ic_name);
-			goto fail;
-		}
-	}
-	printf("done done\n");
+printf("welcome to athn_init -- Currently unimplemented\n");
 #if 0
 	if (!(sc->flags & ATHN_FLAG_PCIE))
 		athn_config_nonpcie(sc);
@@ -3459,27 +3441,49 @@ printf("welcome to athn_init\n");
 	athn_stop(ifp, 1);
 	return (error);
 #endif
-	fail:
+//	fail:
 	return (error);
 }
 
 void
-athn_stop(void *arg)
-//		struct ifnet *ifp, int disable)
+athn_drain_mbufq(struct athn_softc *sc)
+{
+	struct mbuf *m;
+	struct ieee80211_node *ni;
+
+	ATHN_LOCK_ASSERT(sc);
+	while ((m = mbufq_dequeue(&sc->sc_snd)) != NULL) {
+		ni = (struct ieee80211_node *)m->m_pkthdr.rcvif;
+		m->m_pkthdr.rcvif = NULL;
+		ieee80211_free_node(ni);
+		m_freem(m);
+	}
+}
+
+void
+athn_stop(struct athn_softc *sc)
 {
 	printf("%s unimplemented...\n", __func__);
-#if 0
-	struct athn_softc *sc = ifp->if_softc;
-	struct ieee80211com *ic = &sc->sc_ic;
+//	struct athn_softc *sc = ifp->if_softc;
+//	struct ieee80211com *ic = &sc->sc_ic;
 	int qid, i;
 
-	ifp->if_timer = sc->sc_tx_timer = 0;
-	ifp->if_flags &= ~IFF_RUNNING;
-	ifq_clr_oactive(&ifp->if_snd);
+	ATHN_UNLOCK_ASSERT(sc);
 
-	timeout_del(&sc->scan_to);
+	// This is incomplete
+	printf("This line in athn_stop is incomplete\n");
+//	ifp->if_timer = sc->sc_tx_timer = 0;
 
-	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
+	ATHN_LOCK(sc);
+	sc->sc_running = 0;
+	ATHN_UNLOCK(sc);
+
+	// Both moved to the bottom
+//	ifq_clr_oactive(&ifp->if_snd);
+//	timeout_del(&sc->scan_to);
+
+// Is this necessary? Disabling for now
+//	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
 
 #ifdef ATHN_BT_COEXISTENCE
 	/* Disable bluetooth coexistence for combo chips. */
@@ -3488,18 +3492,26 @@ athn_stop(void *arg)
 #endif
 
 	/* Disable interrupts. */
+	ATHN_LOCK(sc);
 	athn_disable_interrupts(sc);
 	/* Acknowledge interrupts (avoids interrupt storms). */
 	AR_WRITE(sc, AR_INTR_SYNC_CAUSE, 0xffffffff);
 	AR_WRITE(sc, AR_INTR_SYNC_MASK, 0);
+	ATHN_UNLOCK(sc);
 
+	ATHN_LOCK(sc);
 	for (qid = 0; qid < ATHN_QID_COUNT; qid++)
 		athn_stop_tx_dma(sc, qid);
+	ATHN_UNLOCK(sc);
+
 	/* XXX call athn_hw_reset if Tx still pending? */
+	ATHN_LOCK(sc);
 	for (qid = 0; qid < ATHN_QID_COUNT; qid++)
 		athn_tx_reclaim(sc, qid);
+	ATHN_UNLOCK(sc);
 
 	/* Stop Rx. */
+	ATHN_LOCK(sc);
 	AR_SETBITS(sc, AR_DIAG_SW, AR_DIAG_RX_DIS | AR_DIAG_RX_ABORT);
 	AR_WRITE(sc, AR_MIBC, AR_MIBC_FMC);
 	AR_WRITE(sc, AR_MIBC, AR_MIBC_CMC);
@@ -3508,23 +3520,32 @@ athn_stop(void *arg)
 	AR_WRITE_BARRIER(sc);
 	athn_set_rxfilter(sc, 0);
 	athn_stop_rx_dma(sc);
+	ATHN_UNLOCK(sc);
 
 	/* Reset HW key cache entries. */
+	ATHN_LOCK(sc);
 	for (i = 0; i < sc->kc_entries; i++)
 		athn_reset_key(sc, i);
+	ATHN_UNLOCK(sc);
 
+	ATHN_LOCK(sc);
 	athn_reset(sc, 0);
 	athn_init_pll(sc, NULL);
 	athn_set_power_awake(sc);
 	athn_reset(sc, 1);
 	athn_init_pll(sc, NULL);
+	ATHN_UNLOCK(sc);
 
+	ATHN_LOCK(sc);
 	athn_set_power_sleep(sc);
+	ATHN_UNLOCK(sc);
 
-	/* For CardBus, power down the socket. */
-	if (disable && sc->sc_disable != NULL)
-		sc->sc_disable(sc);
-#endif
+	// Clear sc_snd queue
+	ATHN_LOCK(sc);
+	athn_drain_mbufq(sc); // Drains sc_snd
+	callout_drain(&sc->scan_to);
+	callout_drain(&sc->calib_to);
+	ATHN_UNLOCK(sc);
 }
 
 static void
@@ -3532,14 +3553,9 @@ athn_parent(struct ieee80211com *ic)
 {
 	struct athn_softc *sc = ic->ic_softc;
 	DEBUG_PRINTF("%s under implemented...\n", __func__);
-//	int startall = 0;
-
-	// Some sort of detatched thingy
-//	if (sc->sc_
 
 	if (ic->ic_nrunning > 0) {
 		if (sc->sc_init(sc) == 0) {
-//		if (athn_usb_init(sc) == 0)
 			ieee80211_start_all(ic);
 		}
 		else
@@ -3547,19 +3563,6 @@ athn_parent(struct ieee80211com *ic)
 	} else {
 		athn_stop(sc);
 	}
-}
-
-
-void
-athn_suspend(struct athn_softc *sc)
-{
-	printf("%s unimplemented...\n", __func__);
-#if 0
-	struct ifnet *ifp = &sc->sc_ic.ic_if;
-
-	if (ifp->if_flags & IFF_RUNNING)
-		athn_stop(ifp, 1);
-#endif
 }
 
 void

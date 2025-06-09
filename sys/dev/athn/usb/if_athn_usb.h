@@ -494,9 +494,9 @@ struct athn_usb_softc {
 	/* USB specific goo. */
 	struct usb_device		*sc_udev;
 	struct usb_interface		*sc_iface;
-#if 0
-	struct usb_task			sc_task;
-#endif
+
+//	struct usb_task			sc_task;	// OpenBSD on top, FreeBSD on bottom
+	struct task				usc_task;
 
 	u_int				flags;
 #define ATHN_USB_FLAG_AR7010	0x01
@@ -526,8 +526,6 @@ struct athn_usb_softc {
 	// Tx would go here, look at /usr/src/sys/dev/otus/if_otusreg.h
 	struct athn_usb_tx_data		tx_data[ATHN_USB_TX_LIST_COUNT];
 
-
-
 	TAILQ_HEAD(, athn_usb_tx_data)	tx_free_list;
 	struct athn_usb_tx_data		tx_cmd;
 	struct athn_usb_tx_data		*tx_bcn;
@@ -547,8 +545,7 @@ struct athn_usb_softc {
 	 */
 	uint8_t				free_node_slots;
 
-	void				(*sc_node_free)(struct ieee80211com *,
-					    struct ieee80211_node *);
+	void				(*node_free)(struct ieee80211_node *);
 	int				sc_key_tasks;
 
 	/* FreeBSD additions */
