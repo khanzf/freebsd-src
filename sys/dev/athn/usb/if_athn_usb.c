@@ -334,9 +334,11 @@ athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
 	struct athn_softc *sc = usbd_xfer_softc(xfer);
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
+	struct ieee80211com *ic = &sc->sc_ic;
 //	struct usb_page_cache *pc;
 	struct athn_usb_rx_data *data;
 	struct mbufq ml;
+	struct mbuf *m;
 	int actlen;
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
@@ -370,6 +372,11 @@ tr_setup:
 
 		mbufq_init(&ml, 1024);
 		athn_usb_rxeof(data, actlen, &ml);
+
+		while ((m=mbufq_dequeue(&ml)) != NULL) {
+			ieee80211_input_mimo_all(ic, m);
+		}
+
 /*
 		struct frame *newframe;
 		newframe = malloc(sizeof(struct frame), M_80211_VAP, M_WAITOK | M_ZERO);
@@ -559,22 +566,17 @@ athn_usb_detach(device_t self)
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 
-	printf("Destroy!\n");
+	athn_usb_stop(sc);
+
 	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
 
-	ieee80211_ifdetach(ic);
-
-	mtx_destroy(&sc->sc_mtx);
-
-	DEBUG_PRINTF("Destroy\n");
 	printf("End of athn_usb_detach\n");
-#if 0
-	struct athn_usb_softc *usc = (struct athn_usb_softc *)self;
-	struct athn_softc *sc = &usc->sc_sc;
-#endif
 
-	if (usc->sc_athn_attached)
+	if (usc->sc_athn_attached) {
+		printf("Going into athn_detach\n");
 		athn_detach(sc);
+		printf("Post athn_detach\n");
+	}
 
 	/* Wait for all async commands to complete. */
 //	athn_usb_wait_async(usc);
@@ -582,13 +584,23 @@ athn_usb_detach(device_t self)
 //	usbd_ref_wait(usc->sc_udev);
 
 	/* Abort and close Tx/Rx pipes. */
+	printf("Before close pipes\n");
 	athn_usb_close_pipes(usc);
+	printf("After close pipes\n");
 
 	/* Free Tx/Rx buffers. */
+	printf("Freeing buffers 1\n");
 	athn_usb_free_tx_cmd(usc);
-	athn_usb_free_tx_list(usc);
+	printf("Freeing buffers 2\n");
+//	athn_usb_free_tx_list(usc);		// Disabling this for now, re-enable it later
+	printf("Freeing buffers 3\n");
 	athn_usb_free_rx_list(usc);
+	printf("Freeing buffers 4\n");
 
+	printf("ieee80211_ifdetach next\n");
+	ieee80211_ifdetach(ic);
+	printf("Destroy mutex\n");
+	mtx_destroy(&sc->sc_mtx);
 	printf("end of destroy\n");
 
 	return (0);
@@ -890,7 +902,7 @@ athn_usb_open_pipes(struct athn_usb_softc *usc, device_t dev)
 void
 athn_usb_close_pipes(struct athn_usb_softc *usc)
 {
-	DEBUG_PRINTF("Unimplemented: %s:%d\n", __func__, __LINE__);
+	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
 #if 0
 	if (usc->tx_data_pipe != NULL) {
 		usbd_close_pipe(usc->tx_data_pipe);
@@ -913,8 +925,6 @@ athn_usb_close_pipes(struct athn_usb_softc *usc)
 		usc->ibuf = NULL;
 	}
 #endif
-//	athn_usb_free_tx_cmd_list(sc);
-	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
 }
 
 int
@@ -2978,13 +2988,12 @@ athn_usb_rx_radiotap(struct athn_softc *sc, struct mbuf *m,
 void
 athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 {
-	struct athn_softc *sc = &usc->sc_sc;
-	struct ieee80211com *ic = &sc->sc_ic;
+	//struct athn_softc *sc = &usc->sc_sc;
 //	struct ifnet *ifp = &ic->ic_if;
 	struct ieee80211_frame *wh;
 //	struct ieee80211_node *ni;
 //	struct ieee80211_rxinfo rxi;
-//	struct ieee80211_rx_stats rxi;
+	struct ieee80211_rx_stats rxi;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_rx_status *rs;
 	uint16_t datalen;
@@ -3052,10 +3061,13 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 	m_adj(m, -IEEE80211_CRC_LEN);
 
 	/* Send the frame to the 802.11 layer. */
-#if 0
-	rxi.rxi_flags = 0;
-	rxi.rxi_rssi = rs->rs_rssi + AR_USB_DEFAULT_NF;
-	rxi.rxi_tstamp = betoh64(rs->rs_tstamp);
+	rxi.r_flags = IEEE80211_R_NF | IEEE80211_R_RSSI;
+	rxi.c_nf = rs->rs_rssi;
+	rxi.c_rssi = AR_USB_DEFAULT_NF;
+
+//	rxi.rxi_rssi = rs->rs_rssi + AR_USB_DEFAULT_NF;
+//	rxi.rxi_tstamp = betoh64(rs->rs_tstamp);
+/*
 	if (!(wh->i_fc[0] & IEEE80211_FC0_TYPE_CTL) &&
 	    (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) &&
 	    (ic->ic_flags & IEEE80211_F_RSNON) &&
@@ -3071,13 +3083,22 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 		}
 		rxi.rxi_flags |= IEEE80211_RXI_HWDEC;
 	}
-#else
+*/
 //	printf("Uncompleted code\n");
-#endif
 
 //	ieee80211_inputm(ifp, m, ni, &rxi, ml);
 //	print_hex(mtod(m, char *), 512);
-	ieee80211_input_all(ic, m, rs->rs_rssi, AR_USB_DEFAULT_NF);
+	if (!ieee80211_add_rx_params(m, &rxi)) {
+		printf("Failure to add add rx params\n");
+		goto skip;
+	}
+
+	if (mbufq_enqueue(ml, m)) {
+		printf("Unable to queue mbuf\n");
+		goto skip;
+	}
+
+//	ieee80211_input_mimo_all(ic, m); //, rs->rs_rssi, AR_USB_DEFAULT_NF);
 	/* Node is no longer needed. */
 //	ieee80211_release_node(ic, ni);
 	return;
