@@ -600,8 +600,7 @@ struct athn_softc {
 	struct athn_calib		calib;
 	struct athn_ani			ani;
 
-#if 0
-#if NBPFILTER > 0
+//#if NBPFILTER > 0
 	caddr_t				sc_drvbpf;
 
 	union {
@@ -617,8 +616,7 @@ struct athn_softc {
 	} sc_txtapu;
 #define sc_txtap			sc_txtapu.th
 	int				sc_txtap_len;
-#endif
-#endif
+//#endif
 	/* FreeBSD additions */
 	struct mtx		sc_mtx;
 
