@@ -309,6 +309,7 @@ static const uint16_t ar_mcs_ndbps[][2] = {
 #define ATHN_NUM_RATES		(ATHN_NUM_LEGACY_RATES + ATHN_NUM_MCS)
 struct athn_node {
 	struct ieee80211_node		ni;
+	struct ieee80211vap			*vap;
 #if 0
 	struct ieee80211_amrr_node	amn;
 	struct ieee80211_ra_node	rn;
@@ -459,6 +460,10 @@ struct athn_softc {
 	void				(*sc_disable_aspm)(struct athn_softc *);
 	void				(*sc_enable_extsynch)(
 					    struct athn_softc *);
+
+	int				(*sc_raw_xmit)(struct ieee80211_node *,
+						    struct mbuf *,
+						    const struct ieee80211_bpf_params *);
 
 //	int				(*sc_newstate)(struct ieee80211com *,
 //					    enum ieee80211_state, int);
