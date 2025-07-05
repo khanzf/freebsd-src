@@ -143,7 +143,7 @@ void		athn_init_qos(struct athn_softc *);
 int		athn_hw_reset(struct athn_softc *, struct ieee80211_channel *,
 		    struct ieee80211_channel *, int);
 
-static 		struct ieee80211_node *athn_pci_node_alloc(struct ieee80211vap *,
+static 		struct ieee80211_node *athn_node_alloc(struct ieee80211vap *,
 		const uint8_t [IEEE80211_ADDR_LEN]);
 
 void		athn_newassoc(struct ieee80211_node *,
@@ -2769,9 +2769,8 @@ athn_hw_reset(struct athn_softc *sc, struct ieee80211_channel *c,
 	return (0);
 }
 
-/* Move this to PCI */
 static struct ieee80211_node *
-athn_pci_node_alloc(struct ieee80211vap *vap, const uint8_t mac[IEEE80211_ADDR_LEN])
+athn_node_alloc(struct ieee80211vap *vap, const uint8_t mac[IEEE80211_ADDR_LEN])
 {
 	printf("This function should be over-written: %s unimplemented...\n", __func__);
 	return (NULL);
