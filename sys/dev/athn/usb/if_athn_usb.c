@@ -187,6 +187,7 @@ void		ar9271_load_ani(struct athn_softc *);
 int		ar5008_ccmp_decap(struct athn_softc *, struct mbuf *,
 		    struct ieee80211_node *);
 int		ar5008_ccmp_encap(struct mbuf *, u_int, struct ieee80211_key *);
+static char * athn_usb_wmi_cmd_str(uint16_t cmd_id);
 
 /* Shortcut. */
 #define athn_usb_wmi_cmd(sc, cmd_id)	\
@@ -1480,7 +1481,7 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_SETUP_COMPLETE, NULL, 0);
 	ATHN_UNLOCK(sc);
 	if (error != 0) {
-//		device_printf("%s: could not complete setup\n", sc->sc_ic.ic_name);
+		device_printf(sc->sc_dev, "could not complete setup\n");
 		return (error);
 	}
 	return (0);
@@ -1532,6 +1533,119 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 }
 
 /*
+ * Return WMI command string
+ */
+static char *
+athn_usb_wmi_cmd_str(uint16_t cmd_id)
+{
+	char *cmd_str = NULL;
+
+	switch(cmd_id) {
+	case AR_WMI_CMD_ECHO:
+		cmd_str = "AR_WMI_CMD_ECHO";
+		break;
+	case AR_WMI_CMD_ACCESS_MEMORY:
+		cmd_str = "AR_WMI_CMD_ACCESS_MEMORY";
+		break;
+	case AR_WMI_GET_FW_VERSION:
+		cmd_str = "AR_WMI_GET_FW_VERSION";
+		break;
+	case AR_WMI_CMD_DISABLE_INTR:
+		cmd_str = "AR_WMI_CMD_DISABLE_INTR";
+		break;
+	case AR_WMI_CMD_ENABLE_INTR:
+		cmd_str = "AR_WMI_CMD_ENABLE_INTR";
+		break;
+	case AR_WMI_CMD_ATH_INIT:
+		cmd_str = "AR_WMI_CMD_ATH_INIT";
+		break;
+	case AR_WMI_CMD_ABORT_TXQ:
+		cmd_str = "AR_WMI_CMD_ABORT_TXQ";
+		break;
+	case AR_WMI_CMD_STOP_TX_DMA:
+		cmd_str = "AR_WMI_CMD_STOP_TX_DMA";
+		break;
+	case AR_WMI_CMD_ABORT_TX_DMA:
+		cmd_str = "AR_WMI_CMD_ABORT_TX_DMA";
+		break;
+	case AR_WMI_CMD_DRAIN_TXQ:
+		cmd_str = "AR_WMI_CMD_DRAIN_TXQ";
+		break;
+	case AR_WMI_CMD_DRAIN_TXQ_ALL:
+		cmd_str = "AR_WMI_CMD_DRAIN_TXQ_ALL";
+		break;
+	case AR_WMI_CMD_START_RECV:
+		cmd_str = "AR_WMI_CMD_START_RECV";
+		break;
+	case AR_WMI_CMD_STOP_RECV:
+		cmd_str = "AR_WMI_CMD_STOP_RECV";
+		break;
+	case AR_WMI_CMD_FLUSH_RECV:
+		cmd_str = "AR_WMI_CMD_FLUSH_RECV";
+		break;
+	case AR_WMI_CMD_SET_MODE:
+		cmd_str = "AR_WMI_CMD_SET_MODE";
+		break;
+	case AR_WMI_CMD_NODE_CREATE:
+		cmd_str = "AR_WMI_CMD_NODE_CREATE";
+		break;
+	case AR_WMI_CMD_NODE_REMOVE:
+		cmd_str = "AR_WMI_CMD_NODE_REMOVE";
+		break;
+	case AR_WMI_CMD_VAP_REMOVE:
+		cmd_str = "AR_WMI_CMD_VAP_REMOVE";
+		break;
+	case AR_WMI_CMD_VAP_CREATE:
+		cmd_str = "AR_WMI_CMD_VAP_CREATE";
+		break;
+	case AR_WMI_CMD_REG_READ:
+		cmd_str = "AR_WMI_CMD_REG_READ";
+		break;
+	case AR_WMI_CMD_REG_WRITE:
+		cmd_str = "AR_WMI_CMD_REG_WRITE";
+		break;
+	case AR_WMI_CMD_RC_STATE_CHANGE:
+		cmd_str = "AR_WMI_CMD_RC_STATE_CHANGE";
+		break;
+	case AR_WMI_CMD_RC_RATE_UPDATE:
+		cmd_str = "AR_WMI_CMD_RC_RATE_UPDATE";
+		break;
+	case AR_WMI_CMD_TARGET_IC_UPDATE:
+		cmd_str = "AR_WMI_CMD_TARGET_IC_UPDATE";
+		break;
+	case AR_WMI_CMD_TX_AGGR_ENABLE:
+		cmd_str = "AR_WMI_CMD_TX_AGGR_ENABLE";
+		break;
+	case AR_WMI_CMD_TGT_DETACH:
+		cmd_str = "AR_WMI_CMD_TGT_DETACH";
+		break;
+	case AR_WMI_CMD_NODE_UPDATE:
+		cmd_str = "AR_WMI_CMD_NODE_UPDATE";
+		break;
+	case AR_WMI_CMD_INT_STATS:
+		cmd_str = "AR_WMI_CMD_INT_STATS";
+		break;
+	case AR_WMI_CMD_TX_STATS:
+		cmd_str = "AR_WMI_CMD_TX_STATS";
+		break;
+	case AR_WMI_CMD_RX_STATS:
+		cmd_str = "AR_WMI_CMD_RX_STATS";
+		break;
+	case AR_WMI_CMD_BITRATE_MASK:
+		cmd_str = "AR_WMI_CMD_BITRATE_MASK";
+		break;
+	case AR_WMI_CMD_REG_RMW:
+		cmd_str = "AR_WMI_CMD_REG_RMW";
+		break;
+	default:
+		cmd_str = "unknown";
+		break;
+	}
+
+	return cmd_str;
+}
+
+/*
  * Mutex entry state: Locked
  */
 int
@@ -1542,7 +1656,6 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_wmi_cmd_hdr *wmi;
-	char *cmd_str;
 	int error;
 
 	while (usc->wait_cmd_id) {
@@ -1600,108 +1713,9 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 //	    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
 	if (error) {
 		if (error == EWOULDBLOCK) {
-			switch(cmd_id) {
-			case AR_WMI_CMD_ECHO:
-				cmd_str = "AR_WMI_CMD_ECHO";
-				break;
-			case AR_WMI_CMD_ACCESS_MEMORY:
-				cmd_str = "AR_WMI_CMD_ACCESS_MEMORY";
-				break;
-			case AR_WMI_GET_FW_VERSION:
-				cmd_str = "AR_WMI_GET_FW_VERSION";
-				break;
-			case AR_WMI_CMD_DISABLE_INTR:
-				cmd_str = "AR_WMI_CMD_DISABLE_INTR";
-				break;
-			case AR_WMI_CMD_ENABLE_INTR:
-				cmd_str = "AR_WMI_CMD_ENABLE_INTR";
-				break;
-			case AR_WMI_CMD_ATH_INIT:
-				cmd_str = "AR_WMI_CMD_ATH_INIT";
-				break;
-			case AR_WMI_CMD_ABORT_TXQ:
-				cmd_str = "AR_WMI_CMD_ABORT_TXQ";
-				break;
-			case AR_WMI_CMD_STOP_TX_DMA:
-				cmd_str = "AR_WMI_CMD_STOP_TX_DMA";
-				break;
-			case AR_WMI_CMD_ABORT_TX_DMA:
-				cmd_str = "AR_WMI_CMD_ABORT_TX_DMA";
-				break;
-			case AR_WMI_CMD_DRAIN_TXQ:
-				cmd_str = "AR_WMI_CMD_DRAIN_TXQ";
-				break;
-			case AR_WMI_CMD_DRAIN_TXQ_ALL:
-				cmd_str = "AR_WMI_CMD_DRAIN_TXQ_ALL";
-				break;
-			case AR_WMI_CMD_START_RECV:
-				cmd_str = "AR_WMI_CMD_START_RECV";
-				break;
-			case AR_WMI_CMD_STOP_RECV:
-				cmd_str = "AR_WMI_CMD_STOP_RECV";
-				break;
-			case AR_WMI_CMD_FLUSH_RECV:
-				cmd_str = "AR_WMI_CMD_FLUSH_RECV";
-				break;
-			case AR_WMI_CMD_SET_MODE:
-				cmd_str = "AR_WMI_CMD_SET_MODE";
-				break;
-			case AR_WMI_CMD_NODE_CREATE:
-				cmd_str = "AR_WMI_CMD_NODE_CREATE";
-				break;
-			case AR_WMI_CMD_NODE_REMOVE:
-				cmd_str = "AR_WMI_CMD_NODE_REMOVE";
-				break;
-			case AR_WMI_CMD_VAP_REMOVE:
-				cmd_str = "AR_WMI_CMD_VAP_REMOVE";
-				break;
-			case AR_WMI_CMD_VAP_CREATE:
-				cmd_str = "AR_WMI_CMD_VAP_CREATE";
-				break;
-			case AR_WMI_CMD_REG_READ:
-				cmd_str = "AR_WMI_CMD_REG_READ";
-				break;
-			case AR_WMI_CMD_REG_WRITE:
-				cmd_str = "AR_WMI_CMD_REG_WRITE";
-				break;
-			case AR_WMI_CMD_RC_STATE_CHANGE:
-				cmd_str = "AR_WMI_CMD_RC_STATE_CHANGE";
-				break;
-			case AR_WMI_CMD_RC_RATE_UPDATE:
-				cmd_str = "AR_WMI_CMD_RC_RATE_UPDATE";
-				break;
-			case AR_WMI_CMD_TARGET_IC_UPDATE:
-				cmd_str = "AR_WMI_CMD_TARGET_IC_UPDATE";
-				break;
-			case AR_WMI_CMD_TX_AGGR_ENABLE:
-				cmd_str = "AR_WMI_CMD_TX_AGGR_ENABLE";
-				break;
-			case AR_WMI_CMD_TGT_DETACH:
-				cmd_str = "AR_WMI_CMD_TGT_DETACH";
-				break;
-			case AR_WMI_CMD_NODE_UPDATE:
-				cmd_str = "AR_WMI_CMD_NODE_UPDATE";
-				break;
-			case AR_WMI_CMD_INT_STATS:
-				cmd_str = "AR_WMI_CMD_INT_STATS";
-				break;
-			case AR_WMI_CMD_TX_STATS:
-				cmd_str = "AR_WMI_CMD_TX_STATS";
-				break;
-			case AR_WMI_CMD_RX_STATS:
-				cmd_str = "AR_WMI_CMD_RX_STATS";
-				break;
-			case AR_WMI_CMD_BITRATE_MASK:
-				cmd_str = "AR_WMI_CMD_BITRATE_MASK";
-				break;
-			case AR_WMI_CMD_REG_RMW:
-				cmd_str = "AR_WMI_CMD_REG_RMW";
-				break;
-			default:
-				cmd_str = "unknown";
-				break;
-			}
-			device_printf(sc->sc_dev, "firmware command time out: %s (0x%x)\n", cmd_str, cmd_id);
+			device_printf(sc->sc_dev, "firmware command time out: %s (0x%x)\n",
+			    athn_usb_wmi_cmd_str(cmd_id),
+			    cmd_id);
 			error = ETIMEDOUT;
 		}
 	}
@@ -1997,11 +2011,13 @@ athn_usb_newassoc_cb(struct athn_usb_softc *usc, void *arg)
 struct ieee80211_node *
 athn_usb_node_alloc(struct ieee80211vap *vap, const uint8_t mac[IEEE80211_ADDR_LEN])
 {
+	struct ieee80211com *ic = vap->iv_ic;
+	struct athn_softc *sc = ic->ic_softc;
 	struct athn_node *an;
 
 	an = malloc(sizeof(struct athn_node), M_80211_NODE, M_NOWAIT | M_ZERO);
 	if (an == NULL) {
-//		device_printf(sc->sc_dev, "%s: unable to allocate node\n");
+		device_printf(sc->sc_dev, "unable to allocate node\n");
 		return NULL;
 	}
 	an->vap = vap;
