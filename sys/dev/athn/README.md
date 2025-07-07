@@ -14,3 +14,4 @@ The OpenBSD driver supports a wide range of chips, this only supports USB.
 ## Todo
 
 Write function that polls for the NF, seems to be ath9k_hw_loadnf and/or related functions
+AR_WMI_CMD_VAP_CREATE into vap creation
