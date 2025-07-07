@@ -3344,9 +3344,11 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 	printf("Running athn_usb_tx here...\n");
 	ATHN_LOCK_ASSERT(sc);
 
+	printf("pre: %d\n", m->m_len);
+	print_hex(m->m_data, m->m_pkthdr.len);
 	wh = mtod(m, struct ieee80211_frame *);
 	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
-		printf("Encrypted packet, dropping!\n");
+		printf("Condition %d\n", __LINE__);
 		return (ENOBUFS);
 #if 0
 		k = ieee80211_get_txkey(ic, wh, ni);
@@ -3363,12 +3365,12 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 #endif
 	}
 	if (IEEE80211_QOS_HAS_SEQ(wh)) {
-		printf("Condition 1\n");
+		printf("Condition %d\n", __LINE__);
 		qos = ((const struct ieee80211_qosframe *)wh)->i_qos[0];
 		tid = qos & IEEE80211_QOS_TID;
 		qid = WME_AC_TO_TID(tid);
 	} else {
-		printf("Condition 2\n");
+		printf("Condition %d\n", __LINE__);
 		qid = WME_AC_BE;
 	}
 
@@ -3406,7 +3408,7 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 	htc = (struct ar_htc_frame_hdr *)&hdr[1];
 	memset(htc, 0, sizeof(*htc));
 	if ((wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) == IEEE80211_FC0_TYPE_DATA) {
-		printf("Condition A\n");
+		printf("Condition %d\n", __LINE__);
 		htc->endpoint_id = usc->ep_data[qid];
 
 		txf = (struct ar_tx_frame *)&htc[1];
@@ -3415,17 +3417,24 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 		txf->node_idx = an->sta_index;
 		txf->vif_idx = 0;
 		txf->tid = tid;
-		if (m->m_pkthdr.len + IEEE80211_CRC_LEN > vap->iv_rtsthreshold)
+		if (m->m_pkthdr.len + IEEE80211_CRC_LEN > vap->iv_rtsthreshold) {
+			printf("Condition %d\n", __LINE__);
 			txf->flags |= htobe32(AR_HTC_TX_RTSCTS);
+		}
 		else if (ic->ic_flags & IEEE80211_F_USEPROT) {
-			if (ic->ic_protmode == IEEE80211_PROT_CTSONLY)
+			printf("Condition %d\n", __LINE__);
+			if (ic->ic_protmode == IEEE80211_PROT_CTSONLY) {
+				printf("Condition %d\n", __LINE__);
 				txf->flags |= htobe32(AR_HTC_TX_CTSONLY);
-			else if (ic->ic_protmode == IEEE80211_PROT_RTSCTS)
+			}
+			else if (ic->ic_protmode == IEEE80211_PROT_RTSCTS) {
+				printf("Condition %d\n", __LINE__);
 				txf->flags |= htobe32(AR_HTC_TX_RTSCTS);
+			}
 		}
 
 		if (k != NULL) {
-			printf("This should not happen\n");
+			printf("Condition %d\n", __LINE__);
 #if 0
 			/* Map 802.11 cipher to hardware encryption type. */
 			if (k->k_cipher == IEEE80211_CIPHER_AES_CCM) {
@@ -3439,14 +3448,14 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 			txf->key_idx = (uintptr_t)k->k_priv;
 #endif
 		} else {
-			printf("I expect this to happen\n");
+			printf("Condition %d\n", __LINE__);
 			txf->key_idx = 0xff;
 		}
 
 		txf->cookie = an->sta_index;
 		frm = (uint8_t *)&txf[1];
 	} else {
-		printf("Condition B\n");
+		printf("Condition %d\n", __LINE__);
 		htc->endpoint_id = usc->ep_mgmt;
 
 		txm = (struct ar_tx_mgmt *)&htc[1];
@@ -3458,9 +3467,10 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 		frm = (uint8_t *)&txm[1];
 	}
 	/* Copy payload. */
+	printf("Condition %d\n", __LINE__);
 	m_copydata(m, 0, m->m_pkthdr.len, frm);
 	frm += m->m_pkthdr.len;
-//	m_freem(m); // Done in athn_usb_raw_xmit
+//	m_freem(m); // Done in athn_usb_raw_xmit <-- Wait, do I need this??
 
 	/* Finalize headers. */
 	htc->payload_len = htobe16(frm - (uint8_t *)&htc[1]);
@@ -3468,6 +3478,9 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 
 //	xferlen = frm - data->buf;
 	data->buflen = frm - data->buf;
+
+	printf("final: %d\n", data->buflen);
+	print_hex(data->buf, data->buflen);
 
 	STAILQ_INSERT_TAIL(&usc->usc_tx_pending, data, next);
 	usbd_transfer_start(usc->usc_xfer[ATHN_TX_DATA]);
