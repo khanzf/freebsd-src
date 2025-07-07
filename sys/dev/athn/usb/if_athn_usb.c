@@ -41,18 +41,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/kdb.h>
 #include <sys/firmware.h>
 
-// Part of the makedev
-#include <net/if.h>
-#include <net/if_var.h>
-#include <net/if_types.h>
-#include <sys/param.h>
-#include <sys/conf.h>
-#include <net/if_private.h>
-#include <sys/types.h>
-#include <sys/uio.h>
-static struct cdevsw athn_usb_cdevsw;
-// End of makedev
-
 #include <net/if.h>
 #include <net/if_var.h>
 #include <net/ethernet.h>
@@ -71,24 +59,7 @@ static struct cdevsw athn_usb_cdevsw;
 #define ECDA_NUM_AC 4
 #include <dev/athn/usb/if_athn_usb.h>
 
-#include <sys/sockio.h> // Delete this
-// Debug delete me
-struct frame {
-	int size;
-	uint8_t *data;
-	STAILQ_ENTRY(frame) next;
-} __packed;
-typedef STAILQ_HEAD(, frame) frame_t;
-
-// Also delete this
-frame_t frame_list;
-// And this
-int lock = 0;
-
 MALLOC_DEFINE(M_ATHN_USB, "athn_usb", "athn usb private state");
-
-int debug_knob = 1;
-#define DEBUG_PRINTF(format, ...) if (debug_knob == 1) { printf("DEBUG: " format, ##__VA_ARGS__);}
 
 #if 0
 static const struct athn_usb_type {
@@ -415,27 +386,21 @@ athn_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	case USB_ST_TRANSFERRED:
 		data = STAILQ_FIRST(&usc->usc_tx_active);
 		if (data == NULL) {
-			printf("active null\n");
 			goto tr_setup;
 		}
 		STAILQ_REMOVE_HEAD(&usc->usc_tx_active, next);
-		printf("txeof?\n");
 		STAILQ_INSERT_TAIL(&usc->usc_tx_inactive, data, next);
 	case USB_ST_SETUP:
 tr_setup:
 		data = STAILQ_FIRST(&usc->usc_tx_pending);
 		if (data == NULL) {
-			printf("pending null\n");
 			break;
 		}
 		STAILQ_REMOVE_HEAD(&usc->usc_tx_pending, next);
 		STAILQ_INSERT_TAIL(&usc->usc_tx_active, data, next);
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->buflen);
-		printf("Tx len: %d\n", data->buflen);
-		print_hex(data->buf, data->buflen);
-		printf("Submit frame!\n");
+		printf("Submitting frame of size %d\n", data->buflen);
 		usbd_transfer_submit(xfer);
-		printf("Post frame submit!\n");
 		break;
 	default: /* Error */
 		printf("Error occured!\n");
@@ -574,12 +539,10 @@ athn_usb_attach(device_t self)
 	if (error) {
 		goto fail;
 	}
-	DEBUG_PRINTF("Disabling auto-delete!!\n");
 //	goto fail;
 	return 0;
 
 fail:
-	DEBUG_PRINTF("Detaching...\n");
 	athn_usb_detach(self);
 	return (ENXIO);
 }
@@ -634,7 +597,10 @@ athn_usb_detach(device_t self)
 static void
 athn_usb_vap_delete(struct ieee80211vap *vap)
 {
-	DEBUG_PRINTF("athn_usb_vap_delete Unimplemented! Memory leak\n");
+	struct athn_vap *avp = (struct athn_vap *)vap;
+
+	ieee80211_vap_detach(vap);
+	free(avp, M_80211_VAP);
 }
 
 static struct ieee80211vap *
@@ -646,7 +612,7 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 //	struct athn_softc *sc = ic->ic_softc;
 	struct athn_vap *avp;
 	struct ieee80211vap *vap;
-	struct athn_usb_softc *usc = ic->ic_softc;
+//	struct athn_usb_softc *usc = ic->ic_softc;
 //	struct ifnet *ifp;
 
 	/* From zyd and rsu, not sure if this applies to athn */
@@ -656,14 +622,12 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 //	}
 
 	if (opmode == IEEE80211_M_MONITOR) {
-		DEBUG_PRINTF("monitor mode\n");
 	}
 
 	avp = malloc(sizeof(struct athn_vap), M_80211_VAP, M_WAITOK | M_ZERO);
 	vap = &avp->vap;
 
 	if(ieee80211_vap_setup(ic, vap, name, unit, opmode, flags, bssid) != 0) {
-		DEBUG_PRINTF("ieee80211_vap_setup failed\n");
 		free(avp, M_80211_VAP);
 		return (NULL);
 	}
@@ -698,15 +662,6 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 	//vap->iv_key_delete = sc->sc_key_delete;
 	//vap->iv_key_set = sc->sc_key_set;
 
-	// Delete me //
-	avp->cdev = make_dev(&athn_usb_cdevsw, 0, UID_ROOT,
-		GID_OPERATOR, 0600, "athn_usb_vap%d", vap->iv_ifp->if_dunit);
-	avp->cdev->si_drv1 = usc;
-	STAILQ_INIT(&frame_list);
-	printf("Creating /dev/athn_usb_vap%d\n", vap->iv_ifp->if_dunit);
-	// Delete me //
-
-
 	return(vap);
 
 	//ifp = vap->iv_ifp;
@@ -729,7 +684,6 @@ athn_usb_attachhook(device_t self)
 	ic->ic_softc = sc;
 
 	/* Load firmware. */
-	debug_knob = 0;
 	error = athn_usb_load_firmware(usc);
 	if (error != 0) {
 		device_printf(sc->sc_dev, "could not load firmware\n");
@@ -755,9 +709,7 @@ athn_usb_attachhook(device_t self)
 	/* Override some operations for USB. */
 
 
-	printf("Pre:  %p\n", ic->ic_raw_xmit);
 	ic->ic_raw_xmit = athn_usb_raw_xmit;
-	printf("Post: %p\n", ic->ic_raw_xmit);
 	// Attach VAP-specific "stuff"
 	ic->ic_vap_create = athn_usb_vap_create;
 	ic->ic_vap_delete = athn_usb_vap_delete; // Not finished
@@ -815,8 +767,6 @@ athn_usb_attachhook(device_t self)
 //	if (bootverbose)
 		ieee80211_announce(ic);
 
-	lock = 0;
-
 	return 0;
 }
 
@@ -830,8 +780,6 @@ athn_usb_raw_xmit(struct ieee80211_node *ni, struct mbuf *m, const struct ieee80
 	struct athn_usb_softc *usc = ic->ic_softc;
 	struct athn_softc *sc = &usc->sc_sc;
 	int error = 0;
-
-	printf("Running athn_usb_raw_xmit\n");
 
 	ATHN_LOCK(sc);
 	if (athn_usb_tx(usc, m, ni) != 0) {
@@ -984,8 +932,6 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 	struct athn_usb_rx_data *data;
 	int i, error = 0;
 
-	printf("athn_usb_alloc_rx_list start\n");
-
 	for (i = 0; i < ATHN_USB_RX_LIST_COUNT; i++) {
 		data = &usc->rx_data[i];
 
@@ -1034,8 +980,6 @@ athn_usb_alloc_tx_list(struct athn_usb_softc *usc)
 	struct athn_softc *sc = &usc->sc_sc;
 	struct athn_usb_tx_data *data;
 	int i, error = 0;
-
-	printf("athn_usb_alloc_tx_list start\n");
 
 	for (i = 0; i < ATHN_USB_TX_LIST_COUNT; i++) {
 		data = &usc->tx_data[i];
@@ -1223,7 +1167,6 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	/* Read firmware image from the filesystem */
 	ATHN_LOCK(sc);
 	fw = firmware_get(sc->fwname);
-	DEBUG_PRINTF("The size of the fw is: %zu\n", fw->datasize);
 	ATHN_UNLOCK(sc);
 	if (fw == NULL) {
 		device_printf(sc->sc_dev, "failed to load of file %s\n", sc->fwname);
@@ -1272,7 +1215,6 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		ATHN_LOCK(sc);
 	}
 	if (error == 0 && usc->wait_msg_id != 0) {
-		DEBUG_PRINTF("Error is %d\n", error);
 //		error = tsleep(&usc->wait_msg_id, 0, "athnfw", hz); /* Wait 1 second at most */
 		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnfw", 2 * hz); /* Wait 1 second at most */
 
@@ -1288,8 +1230,7 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	usc->wait_msg_id = 0;
 
 	firmware_put(fw, FIRMWARE_UNLOAD);
-	if (error != 0)
-		DEBUG_PRINTF("Bad: %s: error=%d\n", __func__, error);
+//	if (error != 0)
 //		device_printf(sc->sc_dev, "%s: %s: error=%d\n", __func__, name, error);
 	return error;
 }
@@ -1479,49 +1420,39 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	/*
 	 * Connect WMI services to USB pipes.
 	 */
-	 DEBUG_PRINTF("++Load Step 1\n");
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_CONTROL,
 	    AR_PIPE_TX_INTR, AR_PIPE_RX_INTR, &usc->ep_ctrl);
 	if (error != 0) {
-		DEBUG_PRINTF("Step 1 error %d\n", error);
 		return (error);
 	}
-	DEBUG_PRINTF("++Load Step 2\n");
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_BEACON,
 	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_bcn);
 	if (error != 0)
 		return (error);
-	 DEBUG_PRINTF("++Load Step 3\n");
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_CAB,
 	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_cab);
 	if (error != 0)
 		return (error);
-	 DEBUG_PRINTF("++Load Step 4\n");
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_UAPSD,
 	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_uapsd);
 	if (error != 0)
 		return (error);
-	 DEBUG_PRINTF("++Load Step 5\n");
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_MGMT,
 	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_mgmt);
 	if (error != 0)
 		return (error);
-	 DEBUG_PRINTF("++Load Step 6\n");
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_DATA_BE,
 	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[WME_AC_BE]);
 	if (error != 0)
 		return (error);
-	 DEBUG_PRINTF("++Load Step 7\n");
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_DATA_BK,
 	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[WME_AC_BK]);
 	if (error != 0)
 		return (error);
-	 DEBUG_PRINTF("++Load Step 8\n");
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_DATA_VI,
 	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[WME_AC_VI]);
 	if (error != 0)
 		return (error);
-	 DEBUG_PRINTF("++Load Step 9\n");
 	error = athn_usb_htc_connect_svc(usc, AR_SVC_WMI_DATA_VO,
 	    AR_PIPE_TX_DATA, AR_PIPE_RX_DATA, &usc->ep_data[WME_AC_VO]);
 	if (error != 0)
@@ -1542,7 +1473,6 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	ATHN_UNLOCK(sc);
 	usc->wait_msg_id = 0;
 	if (error != 0) {
-		DEBUG_PRINTF("%s: could not configure pipe\n", sc->sc_ic.ic_name);
 		return (error);
 	}
 
@@ -1550,7 +1480,7 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_SETUP_COMPLETE, NULL, 0);
 	ATHN_UNLOCK(sc);
 	if (error != 0) {
-		DEBUG_PRINTF("%s: could not complete setup\n", sc->sc_ic.ic_name);
+//		device_printf("%s: could not complete setup\n", sc->sc_ic.ic_name);
 		return (error);
 	}
 	return (0);
@@ -1577,16 +1507,12 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0) {
-		DEBUG_PRINTF("Sleep here Line: %d\n", __LINE__);
 		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnhtc", 10 * hz);
-		DEBUG_PRINTF("Working with Hans, msg_id = %d\n", usc->wait_msg_id);
 		/* Wait 1 second at most */
 	}
 	ATHN_UNLOCK(sc);
 	usc->wait_msg_id = 0;
-//	splx(s);
 	if (error != 0) {
-		DEBUG_PRINTF("error waiting for service %d connection\n", svc_id);
 //		printf("%s: error waiting for service %d connection\n",
 //		    usc->usb_dev.dv_xname, svc_id);
 		return (error);
@@ -1619,8 +1545,6 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	char *cmd_str;
 	int error;
 
-	DEBUG_PRINTF("athn_usb_wmi_xcmd cmd_id = %d\n", cmd_id);
-
 	while (usc->wait_cmd_id) {
 		/*
 		 * The previous USB transfer is not done yet. We can't use
@@ -1628,7 +1552,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		 * in the USB stack.
 		 */
 		//tsleep(&usc->wait_cmd_id, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT);
-		DEBUG_PRINTF("This one probably needs some sort of wakeup equivalent... %d\n", usc->wait_cmd_id);
+//		DEBUG_PRINTF("This one probably needs some sort of wakeup equivalent... %d\n", usc->wait_cmd_id);
 		msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT); /* Wait 1 second at most */
 //		tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmx",
 //		    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
@@ -1840,7 +1764,6 @@ athn_usb_write(struct athn_softc *sc, uint32_t addr, uint32_t val)
 {
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 
-DEBUG_PRINTF("DEBUG: athn_usb_write, addr = %d, val = %d\n", addr, val);
 	usc->wbuf[usc->wcount].addr = htobe32(addr);
 	usc->wbuf[usc->wcount].val  = htobe32(val);
 	if (++usc->wcount == AR_MAX_WRITE_COUNT)
@@ -3341,14 +3264,10 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 	uint8_t qid, tid = 0;
 	//int hasqos, xferlen, error;
 
-	printf("Running athn_usb_tx here...\n");
 	ATHN_LOCK_ASSERT(sc);
 
-	printf("pre: %d\n", m->m_len);
-	print_hex(m->m_data, m->m_pkthdr.len);
 	wh = mtod(m, struct ieee80211_frame *);
 	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
-		printf("Condition %d\n", __LINE__);
 		return (ENOBUFS);
 #if 0
 		k = ieee80211_get_txkey(ic, wh, ni);
@@ -3365,12 +3284,10 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 #endif
 	}
 	if (IEEE80211_QOS_HAS_SEQ(wh)) {
-		printf("Condition %d\n", __LINE__);
 		qos = ((const struct ieee80211_qosframe *)wh)->i_qos[0];
 		tid = qos & IEEE80211_QOS_TID;
 		qid = WME_AC_TO_TID(tid);
 	} else {
-		printf("Condition %d\n", __LINE__);
 		qid = WME_AC_BE;
 	}
 
@@ -3408,7 +3325,6 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 	htc = (struct ar_htc_frame_hdr *)&hdr[1];
 	memset(htc, 0, sizeof(*htc));
 	if ((wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) == IEEE80211_FC0_TYPE_DATA) {
-		printf("Condition %d\n", __LINE__);
 		htc->endpoint_id = usc->ep_data[qid];
 
 		txf = (struct ar_tx_frame *)&htc[1];
@@ -3418,17 +3334,13 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 		txf->vif_idx = 0;
 		txf->tid = tid;
 		if (m->m_pkthdr.len + IEEE80211_CRC_LEN > vap->iv_rtsthreshold) {
-			printf("Condition %d\n", __LINE__);
 			txf->flags |= htobe32(AR_HTC_TX_RTSCTS);
 		}
 		else if (ic->ic_flags & IEEE80211_F_USEPROT) {
-			printf("Condition %d\n", __LINE__);
 			if (ic->ic_protmode == IEEE80211_PROT_CTSONLY) {
-				printf("Condition %d\n", __LINE__);
 				txf->flags |= htobe32(AR_HTC_TX_CTSONLY);
 			}
 			else if (ic->ic_protmode == IEEE80211_PROT_RTSCTS) {
-				printf("Condition %d\n", __LINE__);
 				txf->flags |= htobe32(AR_HTC_TX_RTSCTS);
 			}
 		}
@@ -3455,7 +3367,6 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 		txf->cookie = an->sta_index;
 		frm = (uint8_t *)&txf[1];
 	} else {
-		printf("Condition %d\n", __LINE__);
 		htc->endpoint_id = usc->ep_mgmt;
 
 		txm = (struct ar_tx_mgmt *)&htc[1];
@@ -3467,7 +3378,6 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 		frm = (uint8_t *)&txm[1];
 	}
 	/* Copy payload. */
-	printf("Condition %d\n", __LINE__);
 	m_copydata(m, 0, m->m_pkthdr.len, frm);
 	frm += m->m_pkthdr.len;
 //	m_freem(m); // Done in athn_usb_raw_xmit <-- Wait, do I need this??
@@ -3479,8 +3389,7 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 //	xferlen = frm - data->buf;
 	data->buflen = frm - data->buf;
 
-	printf("final: %d\n", data->buflen);
-	print_hex(data->buf, data->buflen);
+//	print_hex(data->buf, data->buflen);
 
 	STAILQ_INSERT_TAIL(&usc->usc_tx_pending, data, next);
 	usbd_transfer_start(usc->usc_xfer[ATHN_TX_DATA]);
@@ -3577,6 +3486,7 @@ athn_usb_watchdog(struct ifnet *ifp)
 #endif
 }
 
+#if 0
 int
 athn_usb_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 {
@@ -3585,8 +3495,6 @@ athn_usb_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 //	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 //	struct ieee80211com *ic = &sc->sc_ic;
 	int error = 0;
-
-
 
 //	usbd_ref_incr(usc->sc_udev);
 
@@ -3635,7 +3543,6 @@ athn_usb_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 		error = ENOTTY;
 //		error = ieee80211_ioctl(ifp, cmd, data);
 	}
-	}
 
 	/*
 	if (error == ENETRESET) {
@@ -3652,11 +3559,11 @@ athn_usb_ioctl(struct ieee80211com *ic, u_long cmd, void *data)
 
 	return (error);
 }
+#endif
 
 int
 athn_usb_init(struct athn_softc *sc)
 {
-	DEBUG_PRINTF("%s unimplemented.\n", __func__);
 //	struct athn_softc *sc = ifp->if_softc;
 //	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
@@ -3670,8 +3577,6 @@ athn_usb_init(struct athn_softc *sc)
 	uint16_t mode;
 	int error;
 
-printf("Welcome to athn_usb_init\n");
-	printf("ic_raw_xmit in athn_usb_init: %p\n", ic->ic_raw_xmit);
 	/* Init host async commands ring. */
 	ATHN_LOCK(sc);
 	usc->cmdq.cur = usc->cmdq.next = usc->cmdq.queued = 0;
@@ -3689,7 +3594,7 @@ printf("Welcome to athn_usb_init\n");
 
 	c = ic->ic_curchan;
 	extc = NULL;
-	DEBUG_PRINTF("temporarily cutting out iv_bss->ni_chan, DEFINITELY do not ignore this\n");
+//	DEBUG_PRINTF("temporarily cutting out iv_bss->ni_chan, DEFINITELY do not ignore this\n");
 
 	/* In case a new MAC address has been configured. */
 //	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
@@ -3842,7 +3747,6 @@ athn_usb_suspend(device_t self)
 void
 athn_usb_stop(struct athn_softc *sc)
 {
-	DEBUG_PRINTF("%s unimplemented.\n", __func__);
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ar_htc_target_vif hvif;
@@ -3944,44 +3848,6 @@ static driver_t athn_usb_driver = {
 	.name = "athn",
 	.methods = athn_usb_methods,
 	.size = sizeof(struct athn_usb_softc)
-};
-
-static int athn_usb_cdev_read(struct cdev *dev, struct uio *uio, int ioflag) {
-//	struct athn_usb_softc *usc;
-	struct athn_softc *sc;
-	int error = 0;
-	int amount = 0;
-	struct frame *frm;
-
-//	usc = dev->si_drv1;
-	sc = dev->si_drv1;
-	ATHN_LOCK(sc);
-	while (uio->uio_resid > 0) {
-		frm = STAILQ_LAST(&frame_list, frame, next);
-		if (frm == NULL)
-			break;
-		STAILQ_REMOVE(&frame_list, frm, frame, next);
-
-		amount = MIN(uio->uio_resid, frm->size);
-		error = uiomove(frm->data, amount, uio);
-
-		free(frm->data, M_80211_VAP);
-		free(frm, M_80211_VAP);
-		if (error) {
-			printf("Error occured\n");
-			break;
-		}
-	}
-	ATHN_UNLOCK(sc);
-	return 0;
-} 
-
-//static devclass_t athn_usb_devclass;
-static struct cdevsw athn_usb_cdevsw = {
-	.d_version =		D_VERSION,
-	.d_flags =			0,
-	.d_read =			athn_usb_cdev_read,
-	.d_name =			"athn_usb",
 };
 
 DRIVER_MODULE(athn_usb, uhub, athn_usb_driver, NULL, NULL);
