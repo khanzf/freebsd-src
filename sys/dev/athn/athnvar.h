@@ -469,6 +469,7 @@ struct athn_softc {
 //					    enum ieee80211_state, int);
 
 	int						sc_running;
+	int						sc_attached;
 	bus_dma_tag_t			sc_dmat;
 
 	struct callout			scan_to;
