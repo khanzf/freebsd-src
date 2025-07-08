@@ -174,7 +174,7 @@ void		athn_usb_rx_radiotap(struct athn_softc *, struct mbuf *,
 		    struct ar_rx_status *);
 void		athn_usb_rx_frame(struct athn_usb_softc *, struct mbuf *,
 		    struct mbufq *);
-void		athn_usb_rxeof(struct athn_usb_rx_data *, int, struct mbufq *);
+void		athn_usb_rxeof(struct athn_usb_bulk_rx_data *, int, struct mbufq *);
 void		athn_usb_txeof(struct usbd_xfer *, void *);
 int		athn_usb_tx(struct athn_usb_softc *, struct mbuf *,
 		    struct ieee80211_node *);
@@ -310,7 +310,7 @@ athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 //	struct usb_page_cache *pc;
-	struct athn_usb_rx_data *data;
+	struct athn_usb_bulk_rx_data *data;
 	struct mbufq ml;
 	struct mbuf *m;
 	int actlen;
@@ -450,8 +450,6 @@ athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 
 	//	}
-
-
 
 //		usbd_xfer_set_frame_data(xfer, 0, data->buf,
 //			usbd_xfer_max_len(xfer));
@@ -907,35 +905,13 @@ void
 athn_usb_close_pipes(struct athn_usb_softc *usc)
 {
 	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
-#if 0
-	if (usc->tx_data_pipe != NULL) {
-		usbd_close_pipe(usc->tx_data_pipe);
-		usc->tx_data_pipe = NULL;
-	}
-	if (usc->rx_data_pipe != NULL) {
-		usbd_close_pipe(usc->rx_data_pipe);
-		usc->rx_data_pipe = NULL;
-	}
-	if (usc->tx_intr_pipe != NULL) {
-		usbd_close_pipe(usc->tx_intr_pipe);
-		usc->tx_intr_pipe = NULL;
-	}
-	if (usc->rx_intr_pipe != NULL) {
-		usbd_close_pipe(usc->rx_intr_pipe);
-		usc->rx_intr_pipe = NULL;
-	}
-	if (usc->ibuf != NULL) {
-		free(usc->ibuf, M_USBDEV, usc->ibuflen);
-		usc->ibuf = NULL;
-	}
-#endif
 }
 
 int
 athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 {
 	struct athn_softc *sc = &usc->sc_sc;
-	struct athn_usb_rx_data *data;
+	struct athn_usb_bulk_rx_data *data;
 	int i, error = 0;
 
 	for (i = 0; i < ATHN_USB_RX_LIST_COUNT; i++) {
@@ -967,7 +943,7 @@ athn_usb_alloc_rx_list(struct athn_usb_softc *usc)
 void
 athn_usb_free_rx_list(struct athn_usb_softc *usc)
 {
-	struct athn_usb_rx_data *data;
+	struct athn_usb_bulk_rx_data *data;
 	int i;
 
 	/* NB: Caller must abort pipe first. */
@@ -3115,10 +3091,10 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
  *
  */
 void
-athn_usb_rxeof(struct athn_usb_rx_data *data, int len, struct mbufq *ml)
+athn_usb_rxeof(struct athn_usb_bulk_rx_data *data, int len, struct mbufq *ml)
 {
 //	struct mbuf_list ml = MBUF_LIST_INITIALIZER();
-//	struct athn_usb_rx_data *data = priv;
+//	struct athn_usb_bulk_rx_data *data = priv;
 	struct athn_usb_softc *usc = data->usc;
 //	struct athn_softc *sc = &usc->sc_sc;
 //	struct ifnet *ifp = &sc->sc_ic.ic_if;
@@ -3593,7 +3569,7 @@ athn_usb_init(struct athn_softc *sc)
 	struct athn_ops *ops = &sc->ops;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_channel *c, *extc;
-//	struct athn_usb_rx_data *data;
+//	struct athn_usb_bulk_rx_data *data;
 	struct ar_htc_target_vif hvif;
 	struct ar_htc_target_sta sta;
 	struct ar_htc_cap_target hic;
