@@ -439,13 +439,13 @@ struct athn_usb_rx_stream {
 	int		left;
 };
 
-struct athn_usb_rx_data {
+struct athn_usb_bulk_rx_data {
 	struct athn_usb_softc	*usc;
 	uint8_t			*buf;
 	uint16_t		buflen;
 	struct mbuf		*m;
 	struct ieee80211_node	*ni;
-	STAILQ_ENTRY(athn_usb_rx_data)	next;
+	STAILQ_ENTRY(athn_usb_bulk_rx_data)	next;
 };
 
 struct athn_usb_tx_data {
@@ -522,9 +522,10 @@ struct athn_usb_softc {
 	struct ar_htc_msg_conn_svc_rsp	*msg_conn_svc_rsp;
 
 	struct athn_usb_host_cmd_ring	cmdq;
-	struct athn_usb_rx_data		rx_data[ATHN_USB_RX_LIST_COUNT];
-	STAILQ_HEAD(, athn_usb_rx_data)		usc_rx_active;
-	STAILQ_HEAD(, athn_usb_rx_data)		usc_rx_inactive;
+
+	struct athn_usb_bulk_rx_data		rx_data[ATHN_USB_RX_LIST_COUNT];
+	STAILQ_HEAD(, athn_usb_bulk_rx_data)		usc_rx_active;
+	STAILQ_HEAD(, athn_usb_bulk_rx_data)		usc_rx_inactive;
 	// Tx would go here, look at /usr/src/sys/dev/otus/if_otusreg.h
 	struct athn_usb_tx_data		tx_data[ATHN_USB_TX_LIST_COUNT];
 
