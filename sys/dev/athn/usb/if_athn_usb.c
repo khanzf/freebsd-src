@@ -555,17 +555,22 @@ athn_usb_detach(device_t self)
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 
-	athn_usb_stop(sc);
+	ATHN_LOCK(sc);
+	sc->sc_attached = 0;
+	ATHN_UNLOCK(sc);
+
+	if (sc->sc_running == 1)
+		athn_usb_stop(sc);
+	else
+		printf("Unnecessary to run athn_usb_stop when its already stopped..\n");
 
 	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
 
-	printf("End of athn_usb_detach\n");
-
-	if (usc->sc_athn_attached) {
-		printf("Going into athn_detach\n");
-		athn_detach(sc);
-		printf("Post athn_detach\n");
-	}
+//	if (usc->sc_athn_attached) {
+//		printf("Going into athn_detach\n");
+	athn_detach(sc);
+//		printf("Post athn_detach\n");
+//	}
 
 	/* Wait for all async commands to complete. */
 //	athn_usb_wait_async(usc);
@@ -2893,8 +2898,10 @@ athn_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 		usbd_transfer_submit(xfer);
 		break;
 	case USB_ST_ERROR:
+		printf("Rx Interrupt Error...\n");
 		break;
 	default: /* Error */
+		printf("Rx Interrupt default...\n");
 		break;
 		// XXX Based on other drivers, there should be a verification for USB_ERR_CANCELLED
 	}
@@ -3770,6 +3777,11 @@ athn_usb_stop(struct athn_softc *sc)
 //	int s;
 
 	printf("Calling athn_usb_stop\n");
+
+	if (sc->sc_attached == 0) {
+		printf("Exiting athn_usb_stop because already detached...\n");
+		return;
+	}
 	/*
 	sc->sc_tx_timer = 0;
 	ifp->if_timer = 0;
@@ -3836,15 +3848,19 @@ athn_usb_stop(struct athn_softc *sc)
 	ATHN_UNLOCK(sc);
 
 	/* Free Tx/Rx buffers. */
+/*
 	ATHN_LOCK(sc);
 	athn_usb_free_tx_list(usc);
 	athn_usb_free_rx_list(usc);
 	ATHN_UNLOCK(sc);
+*/
 
 	/* Flush Rx stream. */
 	m_freem(usc->rx_stream.m);
 	usc->rx_stream.m = NULL;
 	usc->rx_stream.left = 0;
+
+	sc->sc_running = 0;
 
 //	return (0); // Do error checking elsewhere?
 }

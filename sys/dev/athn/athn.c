@@ -271,6 +271,8 @@ athn_attach(struct athn_softc *sc)
 //	struct ifnet *ifp = &ic->ic_if;
 	int error;
 
+	sc->sc_attached = 1;
+
 	/* Read hardware revision. */
 	ATHN_LOCK(sc);
 	athn_get_chipid(sc);
@@ -529,6 +531,10 @@ void
 athn_detach(struct athn_softc *sc)
 {
 	printf("%s unimplemented\n", __func__);
+
+	printf("attached was set to %d, setting to 0\n", sc->sc_attached);
+	sc->sc_attached = 0;
+
 #if 0
 	struct ifnet *ifp = &sc->sc_ic.ic_if;
 	int qid;
