@@ -400,7 +400,7 @@ tr_setup:
 		STAILQ_REMOVE_HEAD(&usc->usc_tx_pending, next);
 		STAILQ_INSERT_TAIL(&usc->usc_tx_active, data, next);
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->buflen);
-		printf("Submitting frame of size %d\n", data->buflen);
+//		printf("Submitting frame of size %d\n", data->buflen);
 		usbd_transfer_submit(xfer);
 		break;
 	default: /* Error */
@@ -562,11 +562,12 @@ athn_usb_detach(device_t self)
 	else
 		printf("Unnecessary to run athn_usb_stop when its already stopped..\n");
 
-	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
+//	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
 
 //	if (usc->sc_athn_attached) {
 //		printf("Going into athn_detach\n");
-	athn_detach(sc);
+	printf("Put this back in, out of athn_detach\n");
+//	athn_detach(sc);
 //		printf("Post athn_detach\n");
 //	}
 
@@ -603,7 +604,9 @@ athn_usb_vap_delete(struct ieee80211vap *vap)
 {
 	struct athn_vap *avp = (struct athn_vap *)vap;
 
+	printf("Running %s %d\n", __func__, __LINE__);
 	ieee80211_vap_detach(vap);
+	printf("Post %s %d\n", __func__, __LINE__);
 	free(avp, M_80211_VAP);
 }
 
@@ -1131,10 +1134,9 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	usb_device_request_t req;
 	char *ptr;
 	const struct firmware *fw;
-	int mlen, error, size;
+	int mlen, size, error = 0;
 	uint32_t addr;
-
-	error = 0;
+	int retries;
 
 	/* Determine which firmware image to load. */
 	/*
@@ -1188,28 +1190,22 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	usc->wait_msg_id = AR_HTC_MSG_READY;
 	ATHN_LOCK(sc);
 	error = usbd_do_request(usc->sc_udev, &sc->sc_mtx, &req, NULL);
-//	usbd_transfer_start(RX_INTR); //////////////////////////////
 	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
-	int retries = 10;
+	retries = 10;
 	while (usbd_transfer_pending(usc->usc_xfer[ATHN_RX_INTR]) && retries--) {
 		ATHN_UNLOCK(sc);
 		pause("W", hz / 16);
 		ATHN_LOCK(sc);
 	}
 	if (error == 0 && usc->wait_msg_id != 0) {
-//		error = tsleep(&usc->wait_msg_id, 0, "athnfw", hz); /* Wait 1 second at most */
 		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnfw", 2 * hz); /* Wait 1 second at most */
-
-//		msleep(const void *chan, struct mtx *mtx, int priority, const char *wmesg, int timo);
-
 		if (error) {
 			ATHN_UNLOCK(sc);
 			return error;
 		}
 	}
-	ATHN_UNLOCK(sc);
-
 	usc->wait_msg_id = 0;
+	ATHN_UNLOCK(sc);
 
 	firmware_put(fw, FIRMWARE_UNLOAD);
 //	if (error != 0)
@@ -1639,17 +1635,20 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	struct ar_wmi_cmd_hdr *wmi;
 	int error;
 
+	if (!sc->sc_attached) {
+		return (ENXIO);
+	}
 	while (usc->wait_cmd_id) {
 		/*
 		 * The previous USB transfer is not done yet. We can't use
 		 * data->xfer until it is done or we'll cause major confusion
 		 * in the USB stack.
 		 */
-		//tsleep(&usc->wait_cmd_id, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT);
-//		DEBUG_PRINTF("This one probably needs some sort of wakeup equivalent... %d\n", usc->wait_cmd_id);
 		msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT); /* Wait 1 second at most */
-//		tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmx",
-//		    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
+
+		if (!sc->sc_attached) {
+			return (ENXIO);
+		}
 	}
 
 	htc = (struct ar_htc_frame_hdr *)data->buf;
@@ -1666,9 +1665,8 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 
 	data->buflen = sizeof(*htc) + sizeof(*wmi) + ilen;
 
-//	ATHN_LOCK(sc);
+	// Already locked
 	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
-//	ATHN_UNLOCK(sc);
 
 //	usbd_setup_xfer(data->xfer, usc->tx_intr_pipe, NULL, data->buf,
 //	    sizeof(*htc) + sizeof(*wmi) + ilen,
@@ -1686,19 +1684,13 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	 * Wait for WMI command complete interrupt. In case it does not fire
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
-//	error = tsleep(&usc->wait_cmd_id, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
-//	ATHN_LOCK(sc);
 	error = msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
-//	ATHN_UNLOCK(sc);
-//	error = tsleep_nsec(&usc->wait_cmd_id, 0, "athnwmi",
-//	    MSEC_TO_NSEC(ATHN_USB_CMD_TIMEOUT));
-	if (error) {
-		if (error == EWOULDBLOCK) {
-			device_printf(sc->sc_dev, "firmware command time out: %s (0x%x)\n",
-			    athn_usb_wmi_cmd_str(cmd_id),
-			    cmd_id);
-			error = ETIMEDOUT;
-		}
+
+	if (error == EWOULDBLOCK) {
+		device_printf(sc->sc_dev, "firmware command time out: %s (0x%x)\n",
+		    athn_usb_wmi_cmd_str(cmd_id),
+		    cmd_id);
+		error = ETIMEDOUT;
 	}
 
 	/*
@@ -2874,12 +2866,12 @@ athn_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 		usbd_transfer_submit(xfer);
 		break;
 	case USB_ST_ERROR:
-		printf("Rx Interrupt Error...\n");
+	default:
+		printf("Rx Interrupt Error... %s 0x%x\n",
+		    athn_usb_wmi_cmd_str(usc->wait_msg_id), usc->wait_msg_id);
+		wakeup(&usc->wait_msg_id);
 		break;
-	default: /* Error */
-		printf("Rx Interrupt default...\n");
-		break;
-		// XXX Based on other drivers, there should be a verification for USB_ERR_CANCELLED
+	// XXX Based on other drivers, there should be a verification for USB_ERR_CANCELLED
 	}
 
 	return;
@@ -3772,6 +3764,7 @@ athn_usb_stop(struct athn_softc *sc)
 
 	ATHN_LOCK(sc);
 	athn_usb_wait_async(usc);
+	ieee80211_draintask(ic, &ic->ic_parent_task);
 	ATHN_UNLOCK(sc);
 
 	ATHN_LOCK(sc);
