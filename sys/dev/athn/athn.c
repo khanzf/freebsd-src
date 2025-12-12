@@ -906,7 +906,6 @@ athn_set_power_awake(struct athn_softc *sc)
 		}
 		DELAY(50);
 		AR_SETBITS(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN);
-DEBUG_PRINTF("Times: %d\n", ntries);
 	}
 	if (ntries == 4000) {
 		DPRINTF(("RTC not waking up\n"));
