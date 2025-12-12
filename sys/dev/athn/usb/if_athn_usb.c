@@ -303,6 +303,9 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 
 
 /* FreeBSD additions */
+/*
+ * Mutex entry state: Locked
+ */
 void
 athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
@@ -348,7 +351,9 @@ tr_setup:
 		athn_usb_rxeof(data, actlen, &ml);
 
 		while ((m=mbufq_dequeue(&ml)) != NULL) {
+			ATHN_UNLOCK(sc);
 			ieee80211_input_mimo_all(ic, m);
+			ATHN_LOCK(sc);
 		}
 
 /*
@@ -360,10 +365,6 @@ tr_setup:
 */
 //		STAILQ_INSERT_HEAD(&frame_list, newframe, next);
 		
-
-		ATHN_UNLOCK(sc);
-		ATHN_LOCK(sc);
-
 		break;
 	default: /* Error */
 		break;
@@ -658,8 +659,6 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 
 	vap->iv_recv_mgmt = ??
 */
-
-
 
 	ieee80211_vap_attach(vap, athn_usb_media_change, //ieee80211_media_change,
 		ieee80211_media_status, mac);
@@ -3745,7 +3744,6 @@ athn_usb_stop(struct athn_softc *sc)
 //	int s;
 
 	printf("Calling athn_usb_stop\n");
-
 	if (sc->sc_attached == 0) {
 		printf("Exiting athn_usb_stop because already detached...\n");
 		return;
@@ -3763,8 +3761,8 @@ athn_usb_stop(struct athn_softc *sc)
 	/* Wait for all async commands to complete. */
 
 	ATHN_LOCK(sc);
+	printf("Fix this later\n");
 	athn_usb_wait_async(usc);
-	ieee80211_draintask(ic, &ic->ic_parent_task);
 	ATHN_UNLOCK(sc);
 
 	ATHN_LOCK(sc);
@@ -3809,8 +3807,6 @@ athn_usb_stop(struct athn_softc *sc)
 	ATHN_UNLOCK(sc);
 
 	/* Abort Tx/Rx. */
-//	usbd_abort_pipe(usc->tx_data_pipe);
-//	usbd_abort_pipe(usc->rx_data_pipe);
 	ATHN_LOCK(sc);
 	usbd_transfer_stop(usc->usc_xfer[ATHN_TX_DATA]);
 	usbd_transfer_stop(usc->usc_xfer[ATHN_RX_DATA]);
