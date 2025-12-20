@@ -554,10 +554,6 @@ athn_usb_detach(device_t self)
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 
-	ATHN_LOCK(sc);
-	sc->sc_attached = 0;
-	ATHN_UNLOCK(sc);
-
 	if (sc->sc_running == 1)
 		athn_usb_stop(sc);
 	else
@@ -581,6 +577,10 @@ athn_usb_detach(device_t self)
 	printf("Before close pipes\n");
 	athn_usb_close_pipes(usc);
 	printf("After close pipes\n");
+
+	ATHN_LOCK(sc);
+	sc->sc_attached = 0;
+	ATHN_UNLOCK(sc);
 
 	/* Free Tx/Rx buffers. */
 	printf("Freeing buffers 1\n");
