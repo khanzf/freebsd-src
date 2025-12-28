@@ -225,6 +225,8 @@ void athn_data_rx_callback(struct usb_xfer *, usb_error_t);
 void athn_data_tx_callback(struct usb_xfer *, usb_error_t);
 void athn_intr_rx_callback(struct usb_xfer *, usb_error_t);
 int athn_usb_raw_xmit(struct ieee80211_node *, struct mbuf *, const struct ieee80211_bpf_params *);
+static void athn_usb_shutdown(struct athn_usb_softc *);
+int athn_reset_power_on(struct athn_softc *sc);
 
 
 static void print_hex(const void *buffer, size_t length) {
@@ -547,6 +549,47 @@ fail:
 	return (ENXIO);
 }
 
+static void
+athn_usb_shutdown(struct athn_usb_softc *usc)
+{
+	struct athn_softc *sc = &usc->sc_sc;
+	struct ieee80211com *ic = &sc->sc_ic;
+	int ntries;
+	uint32_t val;
+
+	// Turn the device on (needed for state changes)
+	ATHN_LOCK(sc);
+	if (athn_reset_power_on(sc)) {
+		printf("athn_reset_power_on failure, exiting.\n");
+		goto error;
+	}
+	for(ntries=0 ; ntries < 1000 ; ntries++) {
+		val = AR_READ(sc, AR_RTC_STATUS);
+		printf("Val %d 0x%x\n", ntries, val);
+		if (val & AR_RTC_STATUS_ON)
+			break;
+	}
+
+	if (ntries == 1000) {
+		printf("Unable to power on device during shutdown, exiting.\n");
+		goto error;
+	}
+
+	// Write the original back address back to the device
+	printf("Writing the Mac address + friends\n");
+	printf("MAC address: %02x:%02x:%02x:%02x:%02x:%02x\n",
+	   ic->ic_macaddr[0], ic->ic_macaddr[1], ic->ic_macaddr[2],
+	   ic->ic_macaddr[3], ic->ic_macaddr[4], ic->ic_macaddr[5]);
+	AR_WRITE(sc, AR_STA_ID0, LE_READ_4(&ic->ic_macaddr[0]));
+	AR_WRITE(sc, AR_STA_ID1, LE_READ_2(&ic->ic_macaddr[4]));
+
+	printf("Exiting shutdown!\n");
+
+error:
+	ATHN_UNLOCK(sc);
+	return;
+}
+
 int
 athn_usb_detach(device_t self)
 {
@@ -554,10 +597,13 @@ athn_usb_detach(device_t self)
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 
-	if (sc->sc_running == 1)
-		athn_usb_stop(sc);
-	else
-		printf("Unnecessary to run athn_usb_stop when its already stopped..\n");
+
+	athn_usb_shutdown(usc);
+
+//	if (sc->sc_running == 1)
+//		athn_usb_stop(sc);
+//	else
+//		printf("Unnecessary to run athn_usb_stop when its already stopped..\n");
 
 //	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
 
