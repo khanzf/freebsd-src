@@ -549,6 +549,7 @@ fail:
 	return (ENXIO);
 }
 
+/* Very tailored to AR9271 */
 static void
 athn_usb_shutdown(struct athn_usb_softc *usc)
 {
@@ -556,6 +557,7 @@ athn_usb_shutdown(struct athn_usb_softc *usc)
 	struct ieee80211com *ic = &sc->sc_ic;
 	int ntries;
 	uint32_t val;
+	uint32_t id1;
 
 	// Turn the device on (needed for state changes)
 	ATHN_LOCK(sc);
@@ -580,10 +582,66 @@ athn_usb_shutdown(struct athn_usb_softc *usc)
 	printf("MAC address: %02x:%02x:%02x:%02x:%02x:%02x\n",
 	   ic->ic_macaddr[0], ic->ic_macaddr[1], ic->ic_macaddr[2],
 	   ic->ic_macaddr[3], ic->ic_macaddr[4], ic->ic_macaddr[5]);
-	AR_WRITE(sc, AR_STA_ID0, LE_READ_4(&ic->ic_macaddr[0]));
-	AR_WRITE(sc, AR_STA_ID1, LE_READ_2(&ic->ic_macaddr[4]));
 
-	printf("Exiting shutdown!\n");
+	printf("Writing STA0 0x%08x\n", *(uint32_t *)ic->ic_macaddr);
+	AR_WRITE(sc, AR_STA_ID0, LE_READ_4(&ic->ic_macaddr[0]));
+	printf("Reading STA1\n");
+	id1 = AR_READ(sc, AR_STA_ID1);
+	printf("Read STA1 0x%08x\n", id1);
+	printf("Writing STA1 0x%08x\n", *(uint32_t *)(ic->ic_macaddr+4) |
+	   id1 | AR_STA_ID1_RTS_USE_DEF | AR_STA_ID1_CRPT_MIC_ENABLE);
+	AR_WRITE(sc, AR_STA_ID1, LE_READ_2(&ic->ic_macaddr[4]) |
+	   id1 | AR_STA_ID1_RTS_USE_DEF | AR_STA_ID1_CRPT_MIC_ENABLE);
+
+	/* Set BSSID mask. */
+	AR_WRITE(sc, AR_BSSMSKL, 0xffffffff);
+	AR_WRITE(sc, AR_BSSMSKU, 0xffff);
+
+	val = AR_READ(sc, AR_OBS_BUS_1);
+	printf("Value: 0x%08x\n", val);
+
+	/* Disable debug, from ath9k_hw_stopdmarecv */
+	AR_WRITE(sc, AR_MACMISC, ((AR_MACMISC_DMA_OBS_LINE_8 << AR_MACMISC_DMA_OBS_S) |
+	   (AR_MACMISC_MISC_OBS_BUS_1 <<
+	   AR_MACMISC_MISC_OBS_BUS_MSB_S)));
+
+	AR_WRITE(sc, AR_CR, AR_CR_RXD);
+	val = AR_READ(sc, AR_CR);
+	printf("AR_CR 0x%08x = 0x%08x\n", AR_CR, val);
+
+
+	printf("Writing AR_RC: 0x%08x\n", AR_RC_AHB | AR_RC_HOSTIF);
+	AR_WRITE(sc, AR_RC, AR_RC_AHB | AR_RC_HOSTIF);
+
+	/* Setting AR_RTC_STATUS to Sleep */
+	for(ntries = 0; ntries < 1000; ntries++) {
+		if (AR_READ(sc, AR_RTC_STATUS) == AR_RTC_STATUS_ON)
+			break;
+	}
+	if (ntries == 1000) {
+		printf("Unable to Set ar_rtc_status to on, exiting.\n");
+		goto error;
+	}
+
+	/* Force Wake */
+	AR_WRITE(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
+	AR_WRITE(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
+	AR_WRITE_BARRIER(sc);
+
+	/* From ath9k_hw_set_reset */
+	val = AR_READ(sc, AR_INTR_SYNC_CAUSE);
+	printf("Read AR_INTR_SYNC_CAUSE (0x%04x) = 0x%04x\n", AR_INTR_SYNC_CAUSE, val);
+	val &= AR_INTR_SYNC_LOCAL_TIMEOUT | AR_INTR_SYNC_RADM_CPL_TIMEOUT;
+	printf("Adjusted AR_INTR_SYNC_CAUSE (0x%04x) = 0x%04x\n", AR_INTR_SYNC_CAUSE, val);
+
+	AR_WRITE(sc, AR_RC, AR_RC_AHB);
+	AR_WRITE(sc, AR_RTC_RC, AR_RTC_RC_MAC_WARM);
+	AR_WRITE(sc, AR_RTC_RC, 0x0);
+	val = AR_READ(sc, AR_RTC_RC);
+	printf("AR_RTC_RC: 0x%04x\n", val);
+	AR_WRITE_BARRIER(sc);
+
+	printf("Exiting correctly!\n");
 
 error:
 	ATHN_UNLOCK(sc);
