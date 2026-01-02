@@ -556,6 +556,7 @@ struct athn_usb_softc {
 	/* FreeBSD additions */
 //	struct athn_data	usc_cmd[ATHN_USB_CMD_LIST_COUNT];
 	struct usb_xfer		*usc_xfer[ATHN_N_TRANSFERS];
+	const struct firmware		*usc_firmware;
 
 //	STAILQ_HEAD(, athn_data)	tx_intr_queue;
 };

@@ -227,6 +227,7 @@ void athn_intr_rx_callback(struct usb_xfer *, usb_error_t);
 int athn_usb_raw_xmit(struct ieee80211_node *, struct mbuf *, const struct ieee80211_bpf_params *);
 static void athn_usb_shutdown(struct athn_usb_softc *);
 int athn_reset_power_on(struct athn_softc *sc);
+void athn_stop_tx_dma(struct athn_softc *sc, int qid);
 
 
 static void print_hex(const void *buffer, size_t length) {
@@ -554,11 +555,144 @@ static void
 athn_usb_shutdown(struct athn_usb_softc *usc)
 {
 	struct athn_softc *sc = &usc->sc_sc;
-	struct ieee80211com *ic = &sc->sc_ic;
+//	struct ieee80211com *ic = &sc->sc_ic;
 	int ntries;
-	uint32_t val;
-	uint32_t id1;
+//	uint32_t val;
+//	uint32_t id1;
+	int qid;
 
+	/*
+	 * Disable interrupts at the MAC
+	 * Mask all MAC interrupts
+	 * Clear pending causes
+	 * Prevent firmware -> Host signaling
+	 */
+	// Mask all interrupts
+	ATHN_LOCK(sc);
+	AR_WRITE(sc, AR_IER, AR_IER_DISABLE);
+	AR_WRITE(sc, AR_INTR_ASYNC_ENABLE, 0);
+	AR_WRITE(sc, AR_INTR_SYNC_ENABLE, 0);
+
+	AR_WRITE(sc, AR_INTR_ASYNC_CAUSE, 0xffffffff);
+	AR_WRITE(sc, AR_INTR_SYNC_CAUSE, 0xffffffff);
+
+	AR_WRITE_BARRIER(sc);
+	ATHN_UNLOCK(sc);
+
+	/*
+	 * Clear Rx enable bit
+	 * Waits for Rx DMA idle
+	 */
+	/* Disable RX */
+	ATHN_LOCK(sc);
+	AR_WRITE(sc, AR_CR, AR_CR_RXD);
+	ATHN_UNLOCK(sc);
+
+	/* Wait for RX DMA to go idle */
+	for (ntries = 0; ntries < 1000; ntries++) {
+		ATHN_LOCK(sc);
+		if (!(AR_READ(sc, AR_CR) & AR_CR_RXE)) {
+			printf("Good, exiting loop!\n");
+			ATHN_UNLOCK(sc);
+			break;
+		}
+		ATHN_UNLOCK(sc);
+		DELAY(10);
+	}
+	if (ntries == 1000) {
+		printf("Didn't break from loop, bad\n");
+	}
+	/* Firmware cannot push frames or descriptors. */
+//////////////////////////
+
+	// Abort and fully shutdown Tx DMA
+	// Linux equivalent is ath9k_hw_abort_tx_dma
+
+	ATHN_LOCK(sc);
+	for(qid=0;qid < ATHN_QID_COUNT;qid++) {
+		athn_stop_tx_dma(sc, qid);
+	}
+	ATHN_UNLOCK(sc);
+
+
+///
+
+	// Step 2.5 - Disable PLL
+//	ATHN_LOCK(sc);
+//	AR_WRITE(sc, AR_RTC_PLL_CONTROL, 0x0);
+//	AR_WRITE_BARRIER(sc);
+//	ATHN_UNLOCK(sc);
+
+//////////////////////////
+	// Step 3
+
+	// Now full sleep - ath9k_hw_setpower with ATH9k_PM_FULL_SLEEP
+	// Force wake I guess
+	ATHN_LOCK(sc);
+	AR_WRITE(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
+	AR_WRITE_BARRIER(sc);
+	ATHN_UNLOCK(sc);
+
+	// Disable Mac Explicitly
+	ATHN_LOCK(sc);
+	AR_WRITE(sc, AR_CR, AR_CR_RXD);
+	AR_WRITE_BARRIER(sc);
+	ATHN_UNLOCK(sc);
+
+	// Full sleep
+	ATHN_LOCK(sc);
+	AR_WRITE(sc, AR_RTC_RC, AR_RTC_RC_MAC_WARM);
+	AR_WRITE_BARRIER(sc);
+	ATHN_UNLOCK(sc);
+	DELAY(50);
+
+	// Commit sleep
+	ATHN_LOCK(sc);
+	AR_WRITE(sc, AR_RTC_RC, 0);
+	AR_WRITE_BARRIER(sc);
+	ATHN_UNLOCK(sc);
+
+	// Release force wake
+	ATHN_LOCK(sc);
+	AR_WRITE(sc, AR_RTC_FORCE_WAKE, 0);
+	AR_WRITE_BARRIER(sc);
+	ATHN_UNLOCK(sc);
+
+	for(ntries = 0; ntries < 1000; ntries++) {
+		ATHN_LOCK(sc);
+		if (!(AR_READ(sc, AR_RTC_STATUS) & AR_RTC_STATUS_ON)) {
+			printf("Break at Rx poll loop, good!\n");
+			ATHN_UNLOCK(sc);
+			break;
+		}
+		ATHN_UNLOCK(sc);
+		DELAY(10);
+	}
+	if (ntries == 1000)
+		printf("RTC failed to enter full sleep, device needs power cycle\n");
+
+
+//// Step 4
+	// Equivalent of ATH9k_RESET_COLD
+	ATHN_LOCK(sc);
+	AR_WRITE(sc, AR_RC, AR_RC_AHB | AR_RC_HOSTIF);
+	AR_WRITE_BARRIER(sc);
+	ATHN_UNLOCK(sc);
+	DELAY(50);
+
+	ATHN_LOCK(sc);
+	AR_WRITE(sc, AR_RC, AR_RC_AHB);
+	AR_WRITE_BARRIER(sc);
+	ATHN_UNLOCK(sc);
+
+	// Flush posted writes
+	ATHN_LOCK(sc);
+	(void)AR_READ(sc, AR_RC);
+	ATHN_UNLOCK(sc);
+
+	return;
+
+/*
 	// Turn the device on (needed for state changes)
 	ATHN_LOCK(sc);
 	if (athn_reset_power_on(sc)) {
@@ -593,14 +727,14 @@ athn_usb_shutdown(struct athn_usb_softc *usc)
 	AR_WRITE(sc, AR_STA_ID1, LE_READ_2(&ic->ic_macaddr[4]) |
 	   id1 | AR_STA_ID1_RTS_USE_DEF | AR_STA_ID1_CRPT_MIC_ENABLE);
 
-	/* Set BSSID mask. */
+	// Set BSSID mask.
 	AR_WRITE(sc, AR_BSSMSKL, 0xffffffff);
 	AR_WRITE(sc, AR_BSSMSKU, 0xffff);
 
 	val = AR_READ(sc, AR_OBS_BUS_1);
 	printf("Value: 0x%08x\n", val);
 
-	/* Disable debug, from ath9k_hw_stopdmarecv */
+	// Disable debug, from ath9k_hw_stopdmarecv
 	AR_WRITE(sc, AR_MACMISC, ((AR_MACMISC_DMA_OBS_LINE_8 << AR_MACMISC_DMA_OBS_S) |
 	   (AR_MACMISC_MISC_OBS_BUS_1 <<
 	   AR_MACMISC_MISC_OBS_BUS_MSB_S)));
@@ -613,7 +747,7 @@ athn_usb_shutdown(struct athn_usb_softc *usc)
 	printf("Writing AR_RC: 0x%08x\n", AR_RC_AHB | AR_RC_HOSTIF);
 	AR_WRITE(sc, AR_RC, AR_RC_AHB | AR_RC_HOSTIF);
 
-	/* Setting AR_RTC_STATUS to Sleep */
+	// Setting AR_RTC_STATUS to Sleep
 	for(ntries = 0; ntries < 1000; ntries++) {
 		if (AR_READ(sc, AR_RTC_STATUS) == AR_RTC_STATUS_ON)
 			break;
@@ -623,12 +757,12 @@ athn_usb_shutdown(struct athn_usb_softc *usc)
 		goto error;
 	}
 
-	/* Force Wake */
+	// Force Wake
 	AR_WRITE(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
 	AR_WRITE(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
 	AR_WRITE_BARRIER(sc);
 
-	/* From ath9k_hw_set_reset */
+//	// From ath9k_hw_set_reset
 	val = AR_READ(sc, AR_INTR_SYNC_CAUSE);
 	printf("Read AR_INTR_SYNC_CAUSE (0x%04x) = 0x%04x\n", AR_INTR_SYNC_CAUSE, val);
 	val &= AR_INTR_SYNC_LOCAL_TIMEOUT | AR_INTR_SYNC_RADM_CPL_TIMEOUT;
@@ -641,11 +775,17 @@ athn_usb_shutdown(struct athn_usb_softc *usc)
 	printf("AR_RTC_RC: 0x%04x\n", val);
 	AR_WRITE_BARRIER(sc);
 
+	athn_init_pll(sc, NULL);
 	printf("Exiting correctly!\n");
 
 error:
 	ATHN_UNLOCK(sc);
+	if (usc->usc_firmware != NULL) {
+		firmware_put(usc->usc_firmware, FIRMWARE_UNLOAD);
+		usc->usc_firmware = NULL;
+	}
 	return;
+*/
 }
 
 int
@@ -1236,7 +1376,7 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	struct athn_softc *sc = &usc->sc_sc;
 	usb_device_request_t req;
 	char *ptr;
-	const struct firmware *fw;
+//	const struct firmware *fw;
 	int mlen, size, error = 0;
 	uint32_t addr;
 	int retries;
@@ -1253,19 +1393,21 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 
 	/* Read firmware image from the filesystem */
 	ATHN_LOCK(sc);
-	fw = firmware_get(sc->fwname);
+	usc->usc_firmware = firmware_get(sc->fwname);
 	ATHN_UNLOCK(sc);
-	if (fw == NULL) {
+	if (usc->usc_firmware == NULL) {
 		device_printf(sc->sc_dev, "failed to load of file %s\n", sc->fwname);
-		return (ENOENT);
+		error = ENOENT;
+		goto error;
+//		return (ENOENT);
 	}
 
-	ptr = __DECONST(char *, fw->data);
+	ptr = __DECONST(char *, usc->usc_firmware->data);
 	addr = AR9271_FIRMWARE >> 8;
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
 	req.bRequest = AR_FW_DOWNLOAD;
 	USETW(req.wIndex, 0);
-	size = fw->datasize;
+	size = usc->usc_firmware->datasize;
 	ATHN_LOCK(sc);
 	while (size > 0) {
 		mlen = MIN(size, 4096);
@@ -1304,13 +1446,17 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnfw", 2 * hz); /* Wait 1 second at most */
 		if (error) {
 			ATHN_UNLOCK(sc);
-			return error;
+			goto error;
 		}
 	}
 	usc->wait_msg_id = 0;
 	ATHN_UNLOCK(sc);
 
-	firmware_put(fw, FIRMWARE_UNLOAD);
+error:
+	if (usc->usc_firmware) {
+		firmware_put(usc->usc_firmware, FIRMWARE_UNLOAD);
+		usc->usc_firmware = NULL;
+	}
 //	if (error != 0)
 //		device_printf(sc->sc_dev, "%s: %s: error=%d\n", __func__, name, error);
 	return error;

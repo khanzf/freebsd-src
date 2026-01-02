@@ -282,11 +282,12 @@
 #define AR_RXBP_THRESH_LP_S	8
 
 /* Bits for AR_IER. */
+#define AR_IER_DISABLE	0x00000000
 #define AR_IER_ENABLE	0x00000001
 
 /* Bits for AR_MIRT. */
 #define AR_MIRT_RATE_THRES_M	0x0000ffff
-#define AR_MIRT_RATE_THRES_S	0 
+#define AR_MIRT_RATE_THRES_S	0
 
 /* Bits for AR_TIMT. */
 #define AR_TIMT_LAST_M	0x0000ffff
