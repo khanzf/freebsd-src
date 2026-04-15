@@ -22,6 +22,9 @@
  * USB front-end for Atheros AR9271 and AR7010 chipsets.
  */
 
+#pragma clang diagnostic ignored "-Wunused-but-set-variable"
+
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -176,8 +179,8 @@ void		athn_usb_rx_frame(struct athn_usb_softc *, struct mbuf *,
 		    struct mbufq *);
 void		athn_usb_rxeof(struct athn_usb_bulk_rx_data *, int, struct mbufq *);
 void		athn_usb_txeof(struct usbd_xfer *, void *);
-int		athn_usb_tx(struct athn_usb_softc *, struct mbuf *,
-		    struct ieee80211_node *);
+int		athn_usb_tx(struct athn_usb_softc *, struct ieee80211_node *, struct mbuf *,
+		    struct athn_usb_tx_data *, const struct ieee80211_bpf_params *);
 void		athn_usb_start(struct ifnet *);
 void		athn_usb_watchdog(struct ifnet *);
 int		athn_usb_ioctl(struct ieee80211com *, u_long, void *);
@@ -228,7 +231,9 @@ int athn_usb_raw_xmit(struct ieee80211_node *, struct mbuf *, const struct ieee8
 static void athn_usb_shutdown(struct athn_usb_softc *);
 int athn_reset_power_on(struct athn_softc *sc);
 void athn_stop_tx_dma(struct athn_softc *sc, int qid);
-
+void athn_usb_tx_freebuf(struct athn_usb_softc *, struct athn_usb_tx_data *);
+struct athn_usb_tx_data *athn_usb_tx_getbuf(struct athn_usb_softc *);
+void athn_usb_tx_freebuf(struct athn_usb_softc *, struct athn_usb_tx_data *);
 
 static void print_hex(const void *buffer, size_t length) {
     const uint8_t *buf = (const uint8_t *)buffer;
@@ -240,6 +245,25 @@ static void print_hex(const void *buffer, size_t length) {
         }
         printf("\n");
     }
+}
+
+static void viewframe(struct mbuf *m) {
+	int i;
+	struct ieee80211_frame *wh;
+	wh = mtod(m, struct ieee80211_frame *);
+
+	printf("wh->i_fc:    %02x %02x\n", wh->i_fc[0], wh->i_fc[1]);
+	printf("wh->i_dur:   %02x %02x\n", wh->i_dur[0], wh->i_dur[1]);
+	printf("wh->i_dur:   %02x %02x\n", wh->i_dur[0], wh->i_dur[1]);
+	printf("wh->i_addr1: ");
+	for (i = 0; i < IEEE80211_ADDR_LEN; i++)
+		printf("%02x%s", (unsigned char)wh->i_addr1[i], (i < IEEE80211_ADDR_LEN - 1) ? ":" : "\n");
+	printf("wh->i_addr2: ");
+	for (i = 0; i < IEEE80211_ADDR_LEN; i++)
+		printf("%02x%s", (unsigned char)wh->i_addr2[i], (i < IEEE80211_ADDR_LEN - 1) ? ":" : "\n");
+	printf("wh->i_addr3: ");
+	for (i = 0; i < IEEE80211_ADDR_LEN; i++)
+		printf("%02x%s", (unsigned char)wh->i_addr3[i], (i < IEEE80211_ADDR_LEN - 1) ? ":" : "\n");
 }
 
 
@@ -385,12 +409,15 @@ athn_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
 	struct athn_usb_tx_data *data;
 
+	printf("athn_data_tx_callback hits\n");
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
+		printf("USB_ST_TRANSFERRED\n");
 		data = STAILQ_FIRST(&usc->usc_tx_active);
 		if (data == NULL) {
+			printf("Going to tr_setup\n");
 			goto tr_setup;
 		}
 		STAILQ_REMOVE_HEAD(&usc->usc_tx_active, next);
@@ -399,12 +426,16 @@ athn_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 tr_setup:
 		data = STAILQ_FIRST(&usc->usc_tx_pending);
 		if (data == NULL) {
+			printf("data is null, bad\n");
 			break;
 		}
 		STAILQ_REMOVE_HEAD(&usc->usc_tx_pending, next);
 		STAILQ_INSERT_TAIL(&usc->usc_tx_active, data, next);
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->buflen);
-//		printf("Submitting frame of size %d\n", data->buflen);
+		printf("--- Start ---\n");
+		printf("Submitting frame of size %d\n", data->buflen);
+		print_hex(data->buf, data->buflen);
+		printf("---  End  ---\n");
 		usbd_transfer_submit(xfer);
 		break;
 	default: /* Error */
@@ -525,7 +556,8 @@ athn_usb_attach(device_t self)
 	// FreeBSD side
 	mtx_init(&sc->sc_mtx, ic->ic_name, MTX_NETWORK_LOCK, MTX_DEF);
 	ATHN_CMDQ_LOCK_INIT(sc);
-	TASK_INIT(&sc->cmdq_task, 0, athn_cmdq_cb, sc);
+//	TASK_INIT(&usc->cmdq_task, 0, athn_cmdq_cb, sc);
+	TASK_INIT(&usc->usc_task, 0, athn_cmdq_cb, usc);
 
 	if (athn_usb_open_pipes(usc, self) != 0)
 		goto fail;
@@ -1020,6 +1052,28 @@ athn_usb_attachhook(device_t self)
 	return 0;
 }
 
+void
+athn_usb_tx_freebuf(struct athn_usb_softc *usc, struct athn_usb_tx_data *bf)
+{
+//	struct athn_softc *sc = &usc->sc_sc;
+//	ATHN_LOCK_ASSERT(sc);
+	STAILQ_INSERT_TAIL(&usc->usc_tx_inactive, bf, next);
+}
+
+struct athn_usb_tx_data *
+athn_usb_tx_getbuf(struct athn_usb_softc *usc)
+{
+//	struct athn_softc *sc = &usc->sc_sc;
+	struct athn_usb_tx_data *bf;
+
+	bf = STAILQ_FIRST(&usc->usc_tx_inactive);
+	if (bf != NULL)
+		STAILQ_REMOVE_HEAD(&usc->usc_tx_inactive, next);
+	else
+		bf = NULL;
+	return (bf);
+}
+
 /*
  * Otus gets and frees the buffer from usc_tx_active, but I'm making this more of a passthrough
  */
@@ -1029,12 +1083,32 @@ athn_usb_raw_xmit(struct ieee80211_node *ni, struct mbuf *m, const struct ieee80
 	struct ieee80211com *ic = ni->ni_ic;
 	struct athn_usb_softc *usc = ic->ic_softc;
 	struct athn_softc *sc = &usc->sc_sc;
+	struct athn_usb_tx_data *bf;
 	int error = 0;
 
+	printf("Arrived at %s %d\n", __func__, __LINE__);
+
 	ATHN_LOCK(sc);
-	if (athn_usb_tx(usc, m, ni) != 0) {
-		error = EIO;
+	printf("The is-running step should be here\n");
+
+	bf = athn_usb_tx_getbuf(usc);
+	athn_usb_tx_freebuf(usc, bf);
+	if (bf == NULL) {
+		error = ENOBUFS;
+		goto error;
 	}
+
+	if (athn_usb_tx(usc, ni, m, bf, params) != 0) {
+		printf("athn_usb_tx fails!\n");
+		error = EIO;
+		goto error;
+	}
+	ATHN_UNLOCK(sc);
+	return (0);
+
+error:
+	if (bf)
+		athn_usb_tx_freebuf(usc, bf);
 	ATHN_UNLOCK(sc);
 	m_free(m);
 	return error;
@@ -3486,7 +3560,8 @@ athn_usb_txeof(struct usbd_xfer *xfer, void *priv)
 }
 
 int
-athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *ni)
+athn_usb_tx(struct athn_usb_softc *usc, struct ieee80211_node *ni, struct mbuf *m,
+    struct athn_usb_tx_data *data, const struct ieee80211_bpf_params *params)
 {
 	struct athn_softc *sc = (struct athn_softc *)usc;
 	struct athn_node *an = (struct athn_node *)ni;
@@ -3494,7 +3569,7 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_frame *wh;
 	struct ieee80211_key *k = NULL;
-	struct athn_usb_tx_data *data;
+//	struct athn_usb_tx_data *data;
 	struct ar_stream_hdr *hdr;
 	struct ar_htc_frame_hdr *htc;
 	struct ar_tx_frame *txf;
@@ -3502,13 +3577,18 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 	uint8_t *frm;
 	uint16_t qos;
 	uint8_t qid, tid = 0;
-	//int hasqos, xferlen, error;
+//	int hasqos, xferlen, error;
+
+	viewframe(m);
 
 	ATHN_LOCK_ASSERT(sc);
 
 	wh = mtod(m, struct ieee80211_frame *);
+
+	print_hex(mtod(m, char *), 512);
+
 	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
-		return (ENOBUFS);
+		printf("Condition 1, this is not unimplemented, needs to be un-if 0\n");
 #if 0
 		k = ieee80211_get_txkey(ic, wh, ni);
 		if (k->k_cipher == IEEE80211_CIPHER_CCMP) {
@@ -3524,10 +3604,12 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 #endif
 	}
 	if (IEEE80211_QOS_HAS_SEQ(wh)) {
+		printf("Has QOS\n");
 		qos = ((const struct ieee80211_qosframe *)wh)->i_qos[0];
 		tid = qos & IEEE80211_QOS_TID;
 		qid = WME_AC_TO_TID(tid);
 	} else {
+		printf("No QOS\n");
 		qid = WME_AC_BE;
 	}
 
@@ -3565,6 +3647,7 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 	htc = (struct ar_htc_frame_hdr *)&hdr[1];
 	memset(htc, 0, sizeof(*htc));
 	if ((wh->i_fc[0] & IEEE80211_FC0_TYPE_MASK) == IEEE80211_FC0_TYPE_DATA) {
+		printf("Enters condition 1\n");
 		htc->endpoint_id = usc->ep_data[qid];
 
 		txf = (struct ar_tx_frame *)&htc[1];
@@ -3574,19 +3657,22 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 		txf->vif_idx = 0;
 		txf->tid = tid;
 		if (m->m_pkthdr.len + IEEE80211_CRC_LEN > vap->iv_rtsthreshold) {
+			printf("Enters condition 2\n");
 			txf->flags |= htobe32(AR_HTC_TX_RTSCTS);
 		}
 		else if (ic->ic_flags & IEEE80211_F_USEPROT) {
 			if (ic->ic_protmode == IEEE80211_PROT_CTSONLY) {
+				printf("Enters condition 3\n");
 				txf->flags |= htobe32(AR_HTC_TX_CTSONLY);
 			}
 			else if (ic->ic_protmode == IEEE80211_PROT_RTSCTS) {
+				printf("Enters condition 4\n");
 				txf->flags |= htobe32(AR_HTC_TX_RTSCTS);
 			}
 		}
 
 		if (k != NULL) {
-			printf("Condition %d\n", __LINE__);
+			printf("Condition %d UNCOMMENT ME!!!! \n", __LINE__);
 #if 0
 			/* Map 802.11 cipher to hardware encryption type. */
 			if (k->k_cipher == IEEE80211_CIPHER_AES_CCM) {
@@ -3607,6 +3693,7 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 		txf->cookie = an->sta_index;
 		frm = (uint8_t *)&txf[1];
 	} else {
+		printf("Last condition\n");
 		htc->endpoint_id = usc->ep_mgmt;
 
 		txm = (struct ar_tx_mgmt *)&htc[1];
@@ -3629,8 +3716,6 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 //	xferlen = frm - data->buf;
 	data->buflen = frm - data->buf;
 
-//	print_hex(data->buf, data->buflen);
-
 	STAILQ_INSERT_TAIL(&usc->usc_tx_pending, data, next);
 	usbd_transfer_start(usc->usc_xfer[ATHN_TX_DATA]);
 
@@ -3646,6 +3731,7 @@ athn_usb_tx(struct athn_usb_softc *usc, struct mbuf *m, struct ieee80211_node *n
 	}
 	ieee80211_release_node(ic, ni);
 #endif
+	printf("RETURNING ZERO ZERO ZERO\n");
 	return (0);
 }
 

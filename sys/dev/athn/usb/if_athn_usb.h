@@ -498,7 +498,7 @@ struct athn_usb_softc {
 	struct usb_interface		*sc_iface;
 
 //	struct usb_task			sc_task;	// OpenBSD on top, FreeBSD on bottom
-	struct task				usc_task;
+	struct task			usc_task;
 
 	u_int				flags;
 #define ATHN_USB_FLAG_AR7010	0x01
