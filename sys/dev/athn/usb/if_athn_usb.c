@@ -233,7 +233,6 @@ int athn_reset_power_on(struct athn_softc *sc);
 void athn_stop_tx_dma(struct athn_softc *sc, int qid);
 void athn_usb_tx_freebuf(struct athn_usb_softc *, struct athn_usb_tx_data *);
 struct athn_usb_tx_data *athn_usb_tx_getbuf(struct athn_usb_softc *);
-void athn_usb_tx_freebuf(struct athn_usb_softc *, struct athn_usb_tx_data *);
 
 static void print_hex(const void *buffer, size_t length) {
     const uint8_t *buf = (const uint8_t *)buffer;
@@ -247,14 +246,27 @@ static void print_hex(const void *buffer, size_t length) {
     }
 }
 
+// Also a debug function below, delete this later
+static void
+athn_dump_node_cb(struct ieee80211_node *ni, void *arg)
+{
+    static int count = 0;
+
+    count++;
+    printf("Node %d: %6D  state=%d  associd=0x%04x\n",
+        count, ni->ni_macaddr, ":",
+        ni->ni_vap ? ni->ni_vap->iv_state : -1,   /* use vap state instead of missing ni_state */
+        ni->ni_associd);
+}
+
 static void viewframe(struct mbuf *m) {
 	int i;
 	struct ieee80211_frame *wh;
 	wh = mtod(m, struct ieee80211_frame *);
 
-	printf("wh->i_fc:    %02x %02x\n", wh->i_fc[0], wh->i_fc[1]);
-	printf("wh->i_dur:   %02x %02x\n", wh->i_dur[0], wh->i_dur[1]);
-	printf("wh->i_dur:   %02x %02x\n", wh->i_dur[0], wh->i_dur[1]);
+//	printf("wh->i_fc:    %02x %02x\n", wh->i_fc[0], wh->i_fc[1]);
+//	printf("wh->i_dur:   %02x %02x\n", wh->i_dur[0], wh->i_dur[1]);
+//	printf("wh->i_dur:   %02x %02x\n", wh->i_dur[0], wh->i_dur[1]);
 	printf("wh->i_addr1: ");
 	for (i = 0; i < IEEE80211_ADDR_LEN; i++)
 		printf("%02x%s", (unsigned char)wh->i_addr1[i], (i < IEEE80211_ADDR_LEN - 1) ? ":" : "\n");
@@ -336,14 +348,20 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 void
 athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
-	struct athn_softc *sc = usbd_xfer_softc(xfer);
-	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
+	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
+	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
+	struct ieee80211_frame_min *wh;
+	struct ieee80211_node *ni;
 //	struct usb_page_cache *pc;
 	struct athn_usb_bulk_rx_data *data;
 	struct mbufq ml;
 	struct mbuf *m;
 	int actlen;
+
+// This is debug
+//    int count = 0;
+// End of debug
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
@@ -377,9 +395,26 @@ tr_setup:
 		mbufq_init(&ml, 1024);
 		athn_usb_rxeof(data, actlen, &ml);
 
+		// TODO for Farhan: Get rssi and nf
+
 		while ((m=mbufq_dequeue(&ml)) != NULL) {
 			ATHN_UNLOCK(sc);
-			ieee80211_input_mimo_all(ic, m);
+
+			wh = mtod(m, struct ieee80211_frame_min *);
+//			viewframe(m);
+			
+			if (m->m_len >= sizeof(struct ieee80211_frame_min))
+				ni = ieee80211_find_rxnode(ic, wh);
+			else
+				ni = NULL;
+
+			if (ni != NULL) {
+				printf("Injested as desired\n");
+				ieee80211_input(ni, m, 60, -95);
+			}
+			else {
+				ieee80211_input_all(ic, m, 60, -95);
+			}
 			ATHN_LOCK(sc);
 		}
 
@@ -409,12 +444,10 @@ athn_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
 	struct athn_usb_tx_data *data;
 
-	printf("athn_data_tx_callback hits\n");
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
-		printf("USB_ST_TRANSFERRED\n");
 		data = STAILQ_FIRST(&usc->usc_tx_active);
 		if (data == NULL) {
 			printf("Going to tr_setup\n");
@@ -426,16 +459,16 @@ athn_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 tr_setup:
 		data = STAILQ_FIRST(&usc->usc_tx_pending);
 		if (data == NULL) {
-			printf("data is null, bad\n");
+//			printf("data is null, bad\n");
 			break;
 		}
 		STAILQ_REMOVE_HEAD(&usc->usc_tx_pending, next);
 		STAILQ_INSERT_TAIL(&usc->usc_tx_active, data, next);
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->buflen);
-		printf("--- Start ---\n");
-		printf("Submitting frame of size %d\n", data->buflen);
-		print_hex(data->buf, data->buflen);
-		printf("---  End  ---\n");
+//		printf("--- Start ---\n");
+//		printf("Submitting frame of size %d\n", data->buflen);
+//		print_hex(data->buf, data->buflen);
+//		printf("---  End  ---\n");
 		usbd_transfer_submit(xfer);
 		break;
 	default: /* Error */
@@ -905,7 +938,10 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 //		return (NULL);
 //	}
 
+	printf("Creating a USB VAP\n");
+
 	if (opmode == IEEE80211_M_MONITOR) {
+		printf("Device is monitor mode\n");
 	}
 
 	avp = malloc(sizeof(struct athn_vap), M_80211_VAP, M_WAITOK | M_ZERO);
@@ -913,6 +949,7 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 
 	if(ieee80211_vap_setup(ic, vap, name, unit, opmode, flags, bssid) != 0) {
 		free(avp, M_80211_VAP);
+		printf("Exiting VAP early, bad!\n");
 		return (NULL);
 	}
 
@@ -944,6 +981,7 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 	//vap->iv_key_delete = sc->sc_key_delete;
 	//vap->iv_key_set = sc->sc_key_set;
 
+	printf("Returning vap good!\n");
 	return(vap);
 
 	//ifp = vap->iv_ifp;
@@ -1086,17 +1124,15 @@ athn_usb_raw_xmit(struct ieee80211_node *ni, struct mbuf *m, const struct ieee80
 	struct athn_usb_tx_data *bf;
 	int error = 0;
 
-	printf("Arrived at %s %d\n", __func__, __LINE__);
-
 	ATHN_LOCK(sc);
-	printf("The is-running step should be here\n");
+	// XXX printf("The is-running step should be here\n");
 
 	bf = athn_usb_tx_getbuf(usc);
-	athn_usb_tx_freebuf(usc, bf);
 	if (bf == NULL) {
 		error = ENOBUFS;
 		goto error;
 	}
+	athn_usb_tx_freebuf(usc, bf);
 
 	if (athn_usb_tx(usc, ni, m, bf, params) != 0) {
 		printf("athn_usb_tx fails!\n");
@@ -2162,20 +2198,26 @@ int
 athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
     int arg)
 {
-	printf("Working through this code, not finished %s\n", __func__);
 	struct athn_vap *avp = (struct athn_vap *)vap;
 	struct ieee80211com *ic = vap->iv_ic;
 	struct athn_softc *sc = ic->ic_softc;
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 	enum ieee80211_state ostate;
 	uint32_t reg, imask;
-	int error;
+	int error = 0;
 
 //	timeout_del(&sc->calib_to);
+
+/*
+	printf("%s: newstate %s -> %s (arg=%d), iv_bss=%p\n", __func__,
+		ieee80211_state_name[vap->iv_state],
+     	   ieee80211_state_name[nstate], arg, vap->iv_bss);
+*/
 
 	IEEE80211_UNLOCK(ic);
 	ATHN_LOCK(sc);
 	ostate = vap->iv_state;
+	printf("ostate = %d | nstate = %d\n", ostate, nstate);
 
 	switch(ostate) {
 	case IEEE80211_S_RUN:
@@ -2200,9 +2242,11 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 
 	switch (nstate) {
 	case IEEE80211_S_INIT:
+		printf("nstate is IEEE80211_S_INIT\n");
 		athn_set_led(sc, 0);
 		break;
 	case IEEE80211_S_SCAN:
+		printf("nstate is IEEE80211_S_SCAN\n");
 		/* Make the LED blink while scanning. */
 		athn_set_led(sc, !sc->led_state);
 		printf("This is not complete IEEE80211_S_SCAN\n");
@@ -2212,7 +2256,7 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 			    ieee80211_chan2ieee(ic, ic->ic_curchan));
 		break;
 	case IEEE80211_S_AUTH:
-		printf("This is not complete IEEE80211_S_AUTH\n");
+		printf("This is not complete IEEE80211_S_AUTH, but should at least trigger\n");
 		athn_set_led(sc, 0);
 		error = athn_usb_switch_chan(sc, ic->ic_curchan, NULL);
 		if (error)
@@ -2222,6 +2266,11 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 	case IEEE80211_S_ASSOC:
 		break;
 	case IEEE80211_S_RUN:
+
+        	if (vap->iv_bss)
+			printf("  Entering RUN with AP %6D\n", vap->iv_bss->ni_macaddr, ":");
+
+
 		athn_set_led(sc, 1);
 
 		if (ic->ic_opmode == IEEE80211_M_MONITOR)
@@ -2267,7 +2316,13 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 
 	ATHN_UNLOCK(sc);
 	IEEE80211_LOCK(ic);
-	return (avp->newstate(vap, nstate, arg));
+
+	printf("Pre Error: %d\n", error);
+	error = avp->newstate(vap, nstate, arg);
+	printf("----- Post error: %d\n", error);
+	return error;
+
+//	return (avp->newstate(vap, nstate, arg));
 }
 
 void
@@ -3579,13 +3634,13 @@ athn_usb_tx(struct athn_usb_softc *usc, struct ieee80211_node *ni, struct mbuf *
 	uint8_t qid, tid = 0;
 //	int hasqos, xferlen, error;
 
-	viewframe(m);
+//	viewframe(m);
 
 	ATHN_LOCK_ASSERT(sc);
 
 	wh = mtod(m, struct ieee80211_frame *);
 
-	print_hex(mtod(m, char *), 512);
+//	print_hex(mtod(m, char *), 512);
 
 	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
 		printf("Condition 1, this is not unimplemented, needs to be un-if 0\n");
@@ -3609,7 +3664,6 @@ athn_usb_tx(struct athn_usb_softc *usc, struct ieee80211_node *ni, struct mbuf *
 		tid = qos & IEEE80211_QOS_TID;
 		qid = WME_AC_TO_TID(tid);
 	} else {
-		printf("No QOS\n");
 		qid = WME_AC_BE;
 	}
 
@@ -3693,7 +3747,7 @@ athn_usb_tx(struct athn_usb_softc *usc, struct ieee80211_node *ni, struct mbuf *
 		txf->cookie = an->sta_index;
 		frm = (uint8_t *)&txf[1];
 	} else {
-		printf("Last condition\n");
+//		printf("Last condition\n");
 		htc->endpoint_id = usc->ep_mgmt;
 
 		txm = (struct ar_tx_mgmt *)&htc[1];
@@ -3731,7 +3785,6 @@ athn_usb_tx(struct athn_usb_softc *usc, struct ieee80211_node *ni, struct mbuf *
 	}
 	ieee80211_release_node(ic, ni);
 #endif
-	printf("RETURNING ZERO ZERO ZERO\n");
 	return (0);
 }
 
