@@ -584,6 +584,10 @@ athn_usb_attach(device_t self)
 
 	athn_usb_attach_private(usc, USB_GET_DRIVER_INFO(uaa));
 
+	/* Initialize Conditional Variables */
+	cv_init(&usc->cv_cmd, "put something");
+	cv_init(&usc->cv_msg, "clever here");
+
 	// OpenBSD below
 	//usb_init_task(&usc->sc_task, athn_usb_task, sc, USB_TASK_TYPE_GENERIC);
 	// FreeBSD side
@@ -1553,6 +1557,7 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		ATHN_LOCK(sc);
 	}
 	if (error == 0 && usc->wait_msg_id != 0) {
+		printf("msleep wait_msg_id %d\n", __LINE__);
 		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnfw", 2 * hz); /* Wait 1 second at most */
 		if (error) {
 			ATHN_UNLOCK(sc);
@@ -1805,6 +1810,7 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
 	if (error == 0 && usc->wait_msg_id != 0) {
 		//error = tsleep(sc, 0, "athnhtc", hz);
+		printf("msleep wait_msg_id %d\n", __LINE__);
 		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnhtc", hz);
 	}
 	ATHN_UNLOCK(sc);
@@ -1844,6 +1850,7 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 
 	/* Wait at most 1 second for response. */
 	if (error == 0 && usc->wait_msg_id != 0) {
+		printf("msleep wait_msg_id %d\n", __LINE__);
 		error = msleep(&usc->wait_msg_id, &sc->sc_mtx, 0, "athnhtc", 10 * hz);
 		/* Wait 1 second at most */
 	}
@@ -2003,6 +2010,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		 * data->xfer until it is done or we'll cause major confusion
 		 * in the USB stack.
 		 */
+		printf("msleep wait_cmd_id %d\n", __LINE__);
 		msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmx", ATHN_USB_CMD_TIMEOUT); /* Wait 1 second at most */
 
 		if (!sc->sc_attached) {
@@ -2043,7 +2051,9 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	 * Wait for WMI command complete interrupt. In case it does not fire
 	 * wait until the USB transfer times out to avoid racing the transfer.
 	 */
-	error = msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
+	printf("msleep wait_cmd_id %d\n", __LINE__);
+	error = cv_timedwait(&usc->cv_cmd, &sc->sc_mtx, ATHN_USB_CMD_TIMEOUT);
+//	error = msleep(&usc->wait_cmd_id, &sc->sc_mtx, 0, "athnwmi", ATHN_USB_CMD_TIMEOUT);
 
 	if (error == EWOULDBLOCK) {
 		device_printf(sc->sc_dev, "firmware command time out: %s (0x%x)\n",
@@ -2057,7 +2067,9 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	 * Allow other threads to enter this function and use data->xfer.
 	 */
 	usc->wait_cmd_id = 0;
-	wakeup(&usc->wait_cmd_id);
+	printf("wakeup wait_cmd_id at %d\n", __LINE__);
+	cv_broadcast(&usc->cv_cmd);
+	//wakeup(&usc->wait_cmd_id);
 
 	return (error);
 }
@@ -3094,7 +3106,9 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 			memcpy(usc->obuf, &wmi[1], len - sizeof(*wmi));
 		}
 		/* Notify caller of completion. */
-		wakeup(&usc->wait_cmd_id);
+		printf("wakeup wait_cmd_id at %d\n", __LINE__);
+		cv_broadcast(&usc->cv_cmd);
+//		wakeup(&usc->wait_cmd_id);
 		return;
 	}
 	switch (cmd_id & 0xfff) {
@@ -3210,6 +3224,8 @@ athn_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 				break;
 			}
 			usc->wait_msg_id = 0;
+			printf("wake %d\n", __LINE__);
+			printf("wakeup wait_msg_id at %d\n", __LINE__);
 			wakeup(&usc->wait_msg_id);
 			break;
 		case AR_HTC_MSG_CONN_SVC_RSP:
@@ -3221,12 +3237,14 @@ athn_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 					sizeof(struct ar_htc_msg_conn_svc_rsp));
 			}
 			usc->wait_msg_id = 0;
+			printf("wakeup wait_msg_id at %d\n", __LINE__);
 			wakeup(&usc->wait_msg_id);
 			break;
 		case AR_HTC_MSG_CONF_PIPE_RSP:
 			if (usc->wait_msg_id != msg_id)
 				break;
 			usc->wait_msg_id = 0;
+			printf("wakeup wait_msg_id at %d\n", __LINE__);
 			wakeup(&usc->wait_msg_id);
 			break;
 		default:
@@ -3247,6 +3265,7 @@ athn_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 	default:
 		printf("Rx Interrupt Error... %s 0x%x\n",
 		    athn_usb_wmi_cmd_str(usc->wait_msg_id), usc->wait_msg_id);
+		printf("wakeup wait_msg_id at %d\n", __LINE__);
 		wakeup(&usc->wait_msg_id);
 		break;
 	// XXX Based on other drivers, there should be a verification for USB_ERR_CANCELLED
