@@ -516,6 +516,8 @@ struct athn_usb_softc {
 	int				wcount;
 
 	uint16_t			wmi_seq_no;
+	struct cv			cv_cmd;
+	struct cv			cv_msg;
 	uint16_t			wait_cmd_id;
 	uint16_t			wait_msg_id;
 	void				*obuf;
