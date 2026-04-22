@@ -601,6 +601,14 @@ athn_usb_attach(device_t self)
 
 //	STAILQ_INIT(&usc->tx_intr_queue);
 
+	/* Allocate Tx/Rx buffers. */
+	error = athn_usb_alloc_rx_list(usc);
+	if (error != 0)
+		goto fail;
+	error = athn_usb_alloc_tx_list(usc);
+	if (error != 0)
+		goto fail;
+
 	/* Allocate xfer for firmware commands. */
 	error = athn_usb_alloc_tx_cmd(usc);
 	if (error)
@@ -3994,13 +4002,6 @@ athn_usb_init(struct athn_softc *sc)
 	ATHN_LOCK(sc);
 	usc->cmdq.cur = usc->cmdq.next = usc->cmdq.queued = 0;
 
-	/* Allocate Tx/Rx buffers. */
-	error = athn_usb_alloc_rx_list(usc);
-	if (error != 0)
-		goto fail;
-	error = athn_usb_alloc_tx_list(usc);
-	if (error != 0)
-		goto fail;
 	/* Steal one buffer for beacons. */
 	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
 	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
@@ -4236,12 +4237,10 @@ athn_usb_stop(struct athn_softc *sc)
 	ATHN_UNLOCK(sc);
 
 	/* Free Tx/Rx buffers. */
-/*
 	ATHN_LOCK(sc);
 	athn_usb_free_tx_list(usc);
 	athn_usb_free_rx_list(usc);
 	ATHN_UNLOCK(sc);
-*/
 
 	/* Flush Rx stream. */
 	m_freem(usc->rx_stream.m);
