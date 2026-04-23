@@ -609,6 +609,7 @@ athn_usb_attach(device_t self)
 	if (error != 0)
 		goto fail;
 
+	printf("steal addr 1: %p\n", usc->tx_bcn);
 	/* Steal one buffer for beacons. */
 	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
 	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
@@ -4006,6 +4007,11 @@ athn_usb_init(struct athn_softc *sc)
 	ATHN_LOCK(sc);
 	usc->cmdq.cur = usc->cmdq.next = usc->cmdq.queued = 0;
 
+	printf("steal addr 2: %p\n", usc->tx_bcn);
+	/* Steal one buffer for beacons. */
+	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
+	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
+
 	c = ic->ic_curchan;
 	extc = NULL;
 //	DEBUG_PRINTF("temporarily cutting out iv_bss->ni_chan, DEFINITELY do not ignore this\n");
@@ -4238,8 +4244,8 @@ athn_usb_stop(struct athn_softc *sc)
 
 	/* Free Tx/Rx buffers. */
 	ATHN_LOCK(sc);
-	athn_usb_free_tx_list(usc);
-	athn_usb_free_rx_list(usc);
+	//athn_usb_free_tx_list(usc);
+	//athn_usb_free_rx_list(usc);
 	ATHN_UNLOCK(sc);
 
 	/* Flush Rx stream. */
