@@ -610,9 +610,9 @@ athn_usb_attach(device_t self)
 		goto fail;
 
 	/* Steal one buffer for beacons. */
-	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
-	printf("steal addr 1: %p\n", usc->tx_bcn);
-	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
+//	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
+//	printf("steal addr 1: %p\n", usc->tx_bcn);
+//	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
 
 	/* Allocate xfer for firmware commands. */
 	error = athn_usb_alloc_tx_cmd(usc);
