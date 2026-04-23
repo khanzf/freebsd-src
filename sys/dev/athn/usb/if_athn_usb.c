@@ -609,6 +609,10 @@ athn_usb_attach(device_t self)
 	if (error != 0)
 		goto fail;
 
+	/* Steal one buffer for beacons. */
+	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
+	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
+
 	/* Allocate xfer for firmware commands. */
 	error = athn_usb_alloc_tx_cmd(usc);
 	if (error)
@@ -4001,10 +4005,6 @@ athn_usb_init(struct athn_softc *sc)
 	/* Init host async commands ring. */
 	ATHN_LOCK(sc);
 	usc->cmdq.cur = usc->cmdq.next = usc->cmdq.queued = 0;
-
-	/* Steal one buffer for beacons. */
-	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
-	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
 
 	c = ic->ic_curchan;
 	extc = NULL;
