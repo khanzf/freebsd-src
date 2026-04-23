@@ -4009,8 +4009,8 @@ athn_usb_init(struct athn_softc *sc)
 
 	printf("steal addr 2: %p\n", usc->tx_bcn);
 	/* Steal one buffer for beacons. */
-	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
-	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
+//	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
+//	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
 
 	c = ic->ic_curchan;
 	extc = NULL;
