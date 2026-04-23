@@ -609,9 +609,9 @@ athn_usb_attach(device_t self)
 	if (error != 0)
 		goto fail;
 
-	printf("steal addr 1: %p\n", usc->tx_bcn);
 	/* Steal one buffer for beacons. */
 	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
+	printf("steal addr 1: %p\n", usc->tx_bcn);
 	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
 
 	/* Allocate xfer for firmware commands. */
@@ -4002,15 +4002,26 @@ athn_usb_init(struct athn_softc *sc)
 	struct ar_htc_cap_target hic;
 	uint16_t mode;
 	int error;
+//	int i;
 
 	/* Init host async commands ring. */
 	ATHN_LOCK(sc);
 	usc->cmdq.cur = usc->cmdq.next = usc->cmdq.queued = 0;
 
+	/* Reset RX queue state. */
+/*
+	STAILQ_INIT(&usc->usc_rx_active);
+	STAILQ_INIT(&usc->usc_rx_inactive);
+	for (i = 0; i < ATHN_USB_RX_LIST_COUNT; i++) {
+	    STAILQ_INSERT_HEAD(&usc->usc_rx_inactive, &usc->rx_data[i], next);
+	}
+*/
+	STAILQ_CONCAT(&usc->usc_rx_inactive, &usc->usc_rx_active);
+
 	printf("steal addr 2: %p\n", usc->tx_bcn);
 	/* Steal one buffer for beacons. */
-//	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
-//	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
+	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
+	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
 
 	c = ic->ic_curchan;
 	extc = NULL;
@@ -4237,10 +4248,10 @@ athn_usb_stop(struct athn_softc *sc)
 	ATHN_UNLOCK(sc);
 
 	/* Abort Tx/Rx. */
-	ATHN_LOCK(sc);
-	usbd_transfer_stop(usc->usc_xfer[ATHN_TX_DATA]);
-	usbd_transfer_stop(usc->usc_xfer[ATHN_RX_DATA]);
-	ATHN_UNLOCK(sc);
+	//ATHN_LOCK(sc);
+	usbd_transfer_drain(usc->usc_xfer[ATHN_TX_DATA]);
+	usbd_transfer_drain(usc->usc_xfer[ATHN_RX_DATA]);
+	//ATHN_UNLOCK(sc);
 
 	/* Free Tx/Rx buffers. */
 	ATHN_LOCK(sc);
