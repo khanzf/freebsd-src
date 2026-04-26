@@ -409,7 +409,6 @@ tr_setup:
 				ni = NULL;
 
 			if (ni != NULL) {
-				printf("Injested as desired\n");
 				ieee80211_input(ni, m, 60, -95);
 			}
 			else {
@@ -870,6 +869,224 @@ error:
 */
 }
 
+/*
+ * This follows Linux's ath9k_htc_stop
+ * It is pointed to as .stop in htc_drv_main.c
+ */
+static void linux_stop(device_t self)
+{
+
+	struct athn_usb_softc *usc = device_get_softc(self);
+	struct athn_softc *sc = &usc->sc_sc;
+//	struct ieee80211com *ic = &sc->sc_ic;
+	uint32_t val;
+	int i;
+
+	ATHN_LOCK(sc);
+
+	// ath9k_htc_stop -> ath9k_htc_ps_wakeup -> ath9k_hw_setpower (ATH9K_PM_AWAKE) -> ath9k_hw_set_power_awake
+	val = AR_READ(sc, AR_RTC_STATUS);
+	printf("Reading AR_RTC_STATUS (0x7044) = 0x%04x, expecting 0x0004\n", val);
+	// If val is not AR_RTC_STATUS_SHUTDOWN (0x1), then 
+
+	// The code is confusing to me, but it should be AR_RTC_STATUS_ON (0x2)
+
+	if (val != AR_RTC_STATUS_ON) {
+		for(i = 10000 / 50 ; i > 0; i--) {
+			val = AR_READ(sc, AR_RTC_STATUS);
+			printf("Reading AR_RTC_STATUS (0x7044) = 0x%04x, expecting 0x0004\n", val);
+			if (val == AR_RTC_STATUS_ON) // 0x0002
+				break;
+			DELAY(50);
+		}
+	} else {
+		printf("Not necessary to run this function\n");
+	}
+
+	AR_WRITE(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
+
+	val = AR_READ(sc, AR_INTR_SYNC_CAUSE);
+	printf("Reading AR_INTR_SYNC_CAUSE (0x4028) = 0x%04x, expecting 0x18002\n", val);
+	if (val & (AR_DIAG_FORCE_RX_CLEAR | AR_DIAG_ACK_DIS)) {
+		printf("Return value is fine\n");
+	}
+
+	//////////////////////////////////////////
+	// Writes Hold Mac AHB interface in reset
+	AR_WRITE(sc, AR_RC, AR_RC_AHB);
+
+	AR_WRITE(sc, AR_RTC_RC, AR_RTC_RC_MAC_WARM); // Reg = 0x7000, value is 0x0001
+
+
+	AR_WRITE(sc, AR_RTC_RC, 0x0000); // Reg = 0x7000, value is 0x0000
+	// Do not have a reg for this
+	val = AR_READ(sc, AR_RTC_RC); // Reg = 0x7000, should be 0x0000 
+	printf("Reading AR_RTC_RC (0x7000) = 0x%04x, expecting 0x0000\n", val);
+
+	AR_WRITE(sc, AR_RC, 0x0000); // AHB interface in rest
+	//////////////////////////////////////////
+
+
+	// No idea what this does
+	AR_WRITE(sc, AR_RTC_PLL_CONTROL, 0x142c);
+
+	// This comes in ath9k_hw_init_pll
+	DELAY(500);
+	AR_WRITE(sc, AR9271_CLOCK_CONTROL, 0x0304);
+
+	DELAY(100);
+	AR_WRITE(sc, AR_RTC_SLEEP_CLK, AR_RTC_FORCE_DERIVED_CLK);
+
+	// Force Wake -- Writing 0x0003 to 0x704c
+	// 0x1 = Force Wake signal to Mac
+	// 0x2 = Assert FORCE_WAKE on Mac interrupt
+	AR_WRITE(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
+	// This seems to happen twice, willing to delete
+	AR_WRITE(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
+
+	DELAY(50);
+	// Reading from 0x4028
+	val = AR_READ(sc, AR_INTR_SYNC_CAUSE);
+	printf("Reading AR_INTR_SYNC_CAUSE (0x4028) = 0x%04x, expecting 0x18002\n", val);
+
+	// Writing 0x0001 to register 0x4000
+	AR_WRITE(sc, AR_RC, AR_RC_AHB);
+
+	// Writing 0x0003 to register 0x7000
+	AR_WRITE(sc, AR_RTC_RC, AR_RTC_RC_MAC_WARM | AR_RTC_RC_MAC_COLD);
+
+	// Writing 0x0000 to register 0x7000 - moments later (Check if there is a delay)
+	AR_WRITE(sc, AR_RTC_RC, 0x0000);
+
+	val = AR_READ(sc, AR_RTC_RC);
+	printf("Reading AR_RTC_RC (0x7000) = 0x%04x, expecting 0x0000\n", val);
+
+	// Writing 0x0000 to register 0x4000
+	AR_WRITE(sc, AR_RC, 0x0000);
+
+	// writing 0x142c to register 0x7014
+	AR_WRITE(sc, AR_RTC_PLL_CONTROL, 0x142c);
+
+	// Writing 0x0304 to register 0x50040
+	AR_WRITE(sc, AR9271_CLOCK_CONTROL, 0x0304);
+
+	// Writing 0x0002 to register 0x7048
+	AR_WRITE(sc, AR_RTC_SLEEP_CLK, AR_RTC_FORCE_DERIVED_CLK);
+
+	val = AR_READ(sc, AR_OBS_BUS_1);
+	printf("Reading AR_OBS_BUS_1 (0x806c) = 0x%04x, expecting 0x2110\n", val);
+
+	// Writing 0x8100 to register 0x0058
+	AR_WRITE(sc, AR_MACMISC, ((AR_MACMISC_DMA_OBS_LINE_8 << AR_MACMISC_DMA_OBS_S) |
+	    (AR_MACMISC_MISC_OBS_BUS_1 << AR_MACMISC_MISC_OBS_BUS_MSB_S)));
+
+	// Writing 0x0020 to register 0x0008
+	AR_WRITE(sc, AR_CR, AR_CR_RXD);
+
+	val = AR_READ(sc, AR_CR);
+	printf("Reading AR_CR (0x0008) = 0x%04x, expecting 0x0020\n", val);
+
+	// Writing 0x0101 to register 0x4000
+	AR_WRITE(sc, AR_RC, AR_RC_AHB | AR_RC_HOSTIF);
+
+	printf("********************************\n");
+
+	
+
+
+	ATHN_UNLOCK(sc);
+}
+
+/*
+ * This follows Linux's ath9k_hif_usb_disconnect
+ * It is pointed to as .disconnect in hif_usb.c
+ */
+static void linux_disconnect(device_t self)
+{
+	struct athn_usb_softc *usc = device_get_softc(self);
+	struct athn_softc *sc = &usc->sc_sc;
+	struct ieee80211com *ic = &sc->sc_ic;
+	uint32_t val;
+	int i;
+
+	ATHN_LOCK(sc);
+	// From ath9k_hw_set_power_awake
+	val = AR_READ(sc, AR_RTC_STATUS);
+	printf("My Val is 0x%04x\n", val);
+
+	val = AR_READ(sc, AR_RTC_STATUS);
+	printf("My Val is 0x%04x\n", val);
+
+	// Save Mac state
+	AR_WRITE(sc, AR_STA_ID0, LE_READ_4(&ic->ic_macaddr[0]));
+	AR_WRITE(sc, AR_STA_ID1, LE_READ_2(&ic->ic_macaddr[4]));
+	AR_WRITE(sc, AR_BSSMSKL, 0xffffffff);
+	AR_WRITE(sc, AR_BSSMSKU, 0xffff);
+
+	val = AR_READ(sc, AR_OBS_BUS_1);
+	printf("My Val is 0x%04x expecting 0x2400 but not necessary\n", val);
+
+	AR_WRITE(sc, AR_MACMISC, 0x8100);
+
+	/* Bit 5 means Disable Rx. The first bit is 0. */
+	AR_WRITE(sc, AR_CR, 0x0008);
+
+	// AR_CR is 0x0008
+	val = AR_READ(sc, AR_CR);
+	printf("Val at 0x%04x is 0x%04x, expecting 0x0020\n", AR_CR, val);
+
+	/*
+	 * Bit 2 - Hold MAC APB Interface in reset
+	 * Bit 0 - Hold MAC AHB interface in reset
+	 */
+	AR_WRITE(sc, AR_RC, 0x0101);
+
+	printf("Pre  ********\n");
+	for (i=0;i<1000;i++) {
+		// AR_RTC_STATUS = 0x7044
+		val = AR_READ(sc, AR_RTC_STATUS);
+		printf("AR_RTC_STATUS (0x7044) is 0x%04x, expected 0x0002\n", val);
+		if (val == 0x0002)
+			break;
+	}
+	printf("Post ********\n");
+
+	// Writing 0x0003 to register 0x704c
+	AR_WRITE(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
+
+	// Redundent: Writing 0x0003 to register 0x704c
+	AR_WRITE(sc, AR_RTC_FORCE_WAKE, AR_RTC_FORCE_WAKE_EN | AR_RTC_FORCE_WAKE_ON_INT);
+	
+	// Reading 0x4028
+	val = AR_READ(sc, AR_INTR_SYNC_CAUSE);
+	printf("Read from 0x4028 val of 0x%04x, expected 0x18002\n", val)
+
+	// Writing 0x0001 to register 0x4000
+	AR_WRITE(sc, AR_RC, AR_RC_AHB);
+
+	// Writing 0x0001 to register 0x7000
+	AR_WRITE(sc, AR_RTC_RC, AR_RTC_RC_MAC_WARM);
+
+	// Writing 0x0000 to the same register 0x7000	
+	AR_WRITE(sc, AR_RTC_RC, 0x0000);
+
+	// Reading 0x0000 from 0x7000
+	val = AR_READ(sc, AR_RTC_RC);
+	printf("Read from 0x7000 val of 0x%04x, expected 0x0000\n", val)
+
+	// Writing 0x0000 to register 0x4000
+	AR_WRITE(sc, AR_RC, 0x0000);
+
+	// Writing 0x14c to register 0x7014
+	AR_WRITE(sc, AR_RTC_PLL_CONTROL, 0x142c);
+
+
+	printf("==================\n");
+
+	ATHN_UNLOCK(sc);
+}
+
+
 int
 athn_usb_detach(device_t self)
 {
@@ -877,8 +1094,9 @@ athn_usb_detach(device_t self)
 	struct athn_softc *sc = &usc->sc_sc;
 	struct ieee80211com *ic = &sc->sc_ic;
 
-
-	athn_usb_shutdown(usc);
+	linux_stop(self);
+	linux_disconnect(self);
+//	athn_usb_shutdown(usc);
 
 	ATHN_LOCK(sc);
 	cv_broadcast(&usc->cv_cmd);
