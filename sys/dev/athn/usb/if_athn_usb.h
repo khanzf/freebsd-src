@@ -562,3 +562,10 @@ struct athn_usb_softc {
 
 //	STAILQ_HEAD(, athn_data)	tx_intr_queue;
 };
+
+#define MTAG_ATHN_COOKIE	0
+
+struct athn_signal_tag {
+	int	rssi;
+	int	nf;
+};

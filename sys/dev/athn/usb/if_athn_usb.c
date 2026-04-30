@@ -233,6 +233,8 @@ int athn_reset_power_on(struct athn_softc *sc);
 void athn_stop_tx_dma(struct athn_softc *sc, int qid);
 void athn_usb_tx_freebuf(struct athn_usb_softc *, struct athn_usb_tx_data *);
 struct athn_usb_tx_data *athn_usb_tx_getbuf(struct athn_usb_softc *);
+int athn_mbufq_enqueue_tag(struct mbufq *, struct mbuf *m, int, int);
+struct mbuf *athn_mbufq_dequeue_tag(struct mbufq *, int *, int *);
 
 static void print_hex(const void *buffer, size_t length) {
     const uint8_t *buf = (const uint8_t *)buffer;
@@ -358,6 +360,7 @@ athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct mbufq ml;
 	struct mbuf *m;
 	int actlen;
+	int rssi, nf;
 
 // This is debug
 //    int count = 0;
@@ -397,7 +400,8 @@ tr_setup:
 
 		// TODO for Farhan: Get rssi and nf
 
-		while ((m=mbufq_dequeue(&ml)) != NULL) {
+		//while ((m=mbufq_dequeue(&ml)) != NULL) {
+		while ((m=athn_mbufq_dequeue_tag(&ml, &rssi, &nf)) != NULL) {
 			ATHN_UNLOCK(sc);
 
 			wh = mtod(m, struct ieee80211_frame_min *);
@@ -408,11 +412,12 @@ tr_setup:
 			else
 				ni = NULL;
 
+			printf("rssi = %d nf = %d\n", rssi, nf);
 			if (ni != NULL) {
-				ieee80211_input(ni, m, 60, -95);
+				ieee80211_input(ni, m, rssi, nf);
 			}
 			else {
-				ieee80211_input_all(ic, m, 60, -95);
+				ieee80211_input_all(ic, m, rssi, nf);
 			}
 			ATHN_LOCK(sc);
 		}
@@ -3356,6 +3361,50 @@ athn_usb_rx_radiotap(struct athn_softc *sc, struct mbuf *m,
 #endif
 }
 
+int
+athn_mbufq_enqueue_tag(struct mbufq *ml, struct mbuf *m, int rssi, int nf)
+{
+	struct m_tag *tag;
+	struct athn_signal_tag *sig;
+
+	tag = m_tag_alloc(MTAG_ATHN_COOKIE, 0, sizeof(struct athn_signal_tag), M_NOWAIT);
+	if (tag == NULL) {
+		m_free(m);
+		return (ENOMEM);
+	}
+
+	sig = (struct athn_signal_tag *)(tag + 1);
+	sig->rssi = rssi;
+	sig->nf = nf;
+
+	m_tag_prepend(m, tag);
+	return mbufq_enqueue(ml, m);
+}
+
+struct mbuf *
+athn_mbufq_dequeue_tag(struct mbufq *ml, int *rssi, int *nf)
+{
+	struct mbuf *m;
+	struct m_tag *tag;
+	struct athn_signal_tag *sig;
+
+	m = mbufq_dequeue(ml);
+	if (m == NULL)
+		return (NULL);
+
+	tag = m_tag_find(m, 0, NULL);
+	if (tag != NULL) {
+		sig = (struct athn_signal_tag *)(tag + 1);
+		*rssi = sig->rssi;
+		*nf = sig->nf;
+	} else {
+		*rssi = 0;
+		*nf = 0;
+	}
+
+	return (m);
+}
+
 void
 athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 {
@@ -3464,7 +3513,7 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 		goto skip;
 	}
 
-	if (mbufq_enqueue(ml, m)) {
+	if (athn_mbufq_enqueue_tag(ml, m, rs->rs_rssi, AR_USB_DEFAULT_NF)) {
 		printf("Unable to queue mbuf\n");
 		goto skip;
 	}
