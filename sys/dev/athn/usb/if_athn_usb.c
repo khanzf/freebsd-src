@@ -409,7 +409,6 @@ tr_setup:
 				ni = NULL;
 
 			if (ni != NULL) {
-				printf("Injested as desired\n");
 				ieee80211_input(ni, m, 60, -95);
 			}
 			else {
@@ -2353,12 +2352,7 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 	ATHN_UNLOCK(sc);
 	IEEE80211_LOCK(ic);
 
-	printf("Pre Error: %d\n", error);
-	error = avp->newstate(vap, nstate, arg);
-	printf("----- Post error: %d\n", error);
-	return error;
-
-//	return (avp->newstate(vap, nstate, arg));
+	return (avp->newstate(vap, nstate, arg));
 }
 
 void
@@ -4018,7 +4012,6 @@ athn_usb_init(struct athn_softc *sc)
 */
 	STAILQ_CONCAT(&usc->usc_rx_inactive, &usc->usc_rx_active);
 
-	printf("steal addr 2: %p\n", usc->tx_bcn);
 	/* Steal one buffer for beacons. */
 	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
 	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
