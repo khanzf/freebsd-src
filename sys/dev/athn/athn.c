@@ -73,21 +73,16 @@ int debug_knob = 1;
 int athn_debug = 0;
 #endif
 
-#if 1
-
 void		athn_radiotap_attach(struct athn_softc *);
 void		athn_get_chanlist(struct athn_softc *);
-#endif
 const char *	athn_get_mac_name(struct athn_softc *);
 const char *	athn_get_rf_name(struct athn_softc *);
-#if 1
 void		athn_led_init(struct athn_softc *);
 void		athn_set_led(struct athn_softc *, int);
 void		athn_btcoex_init(struct athn_softc *);
 void		athn_btcoex_enable(struct athn_softc *);
 void		athn_btcoex_disable(struct athn_softc *);
 void		athn_set_rxfilter(struct athn_softc *, uint32_t);
-#endif
 void		athn_get_chipid(struct athn_softc *);
 int		athn_reset_power_on(struct athn_softc *);
 int		athn_reset(struct athn_softc *, int);
@@ -95,7 +90,6 @@ void		athn_init_pll(struct athn_softc *,
 		    const struct ieee80211_channel *);
 int		athn_set_power_awake(struct athn_softc *);
 void		athn_set_power_sleep(struct athn_softc *);
-#if 1
 void		athn_write_serdes(struct athn_softc *,
 		    const struct athn_serdes *);
 void		athn_config_pcie(struct athn_softc *);
@@ -118,9 +112,7 @@ void		athn_start_noisefloor_calib(struct athn_softc *, int);
 void		athn_calib_to(void *);
 int		athn_init_calib(struct athn_softc *,
 		    struct ieee80211_channel *, struct ieee80211_channel *);
-#endif
 uint8_t		athn_chan2fbin(struct ieee80211_channel *);
-#if 1
 int		athn_interpolate(int, int, int, int, int);
 void		athn_get_pier_ival(uint8_t, const uint8_t *, int, int *,
 		    int *);
@@ -150,8 +142,6 @@ void		athn_newassoc(struct ieee80211_node *,
 		    int);
 int		athn_media_change(struct ifnet *);
 void		athn_next_scan(void *);
-//int		athn_newstate(struct ieee80211vap *, enum ieee80211_state,
-//		    int);
 void		athn_updateedca(struct ieee80211com *);
 int		athn_clock_rate(struct athn_softc *);
 int		athn_chan_sifs(struct ieee80211_channel *);
@@ -177,7 +167,6 @@ void		athn_ani_cck_err_trigger(struct athn_softc *);
 void		athn_ani_lower_immunity(struct athn_softc *);
 void		athn_ani_restart(struct athn_softc *);
 void		athn_ani_monitor(struct athn_softc *);
-#endif
 
 /* Extern functions. */
 int		ar5416_attach(struct athn_softc *);
@@ -197,24 +186,17 @@ void		ar9287_1_3_setup_async_fifo(struct athn_softc *);
 void		ar9003_reset_txsring(struct athn_softc *);
 
 /* Added Definitions */
-void	athn_config_ht(struct athn_softc *sc);
-void	athn_getradiocaps(struct ieee80211com *ic,
-			int maxchans, int *nchans, struct ieee80211_channel chans[]);
-void	athn_scan_start(struct ieee80211com *ic);
-void	athn_scan_end(struct ieee80211com *ic);
-void	athn_drain_mbufq(struct athn_softc *);
-
-#if 0
-struct cfdriver athn_cd = {
-	NULL, "athn", DV_IFNET
-};
-#endif
+void		athn_config_ht(struct athn_softc *sc);
+void		athn_getradiocaps(struct ieee80211com *ic,
+		    int maxchans, int *nchans, struct ieee80211_channel chans[]);
+void		athn_scan_start(struct ieee80211com *ic);
+void		athn_scan_end(struct ieee80211com *ic);
+void		athn_drain_mbufq(struct athn_softc *);
 
 void
 athn_config_ht(struct athn_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
-//	int i, ntxstreams, nrxstreams;
 	int ntxstreams, nrxstreams;
 
 	if ((sc->flags & ATHN_FLAG_11N) == 0)
@@ -268,7 +250,6 @@ int
 athn_attach(struct athn_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
-//	struct ifnet *ifp = &ic->ic_if;
 	int error;
 
 	sc->sc_attached = 1;
@@ -338,7 +319,6 @@ athn_attach(struct athn_softc *sc)
 //		DPRINTF(("found RF switch connected to GPIO pin %d\n",
 	}
 	//DPRINTF(("%d key cache entries\n", sc->kc_entries));
-// FreeBSD does not care about this
 #if 0
 	/*
 	 * In HostAP mode, the number of STAs that we can handle is
@@ -379,25 +359,14 @@ athn_attach(struct athn_softc *sc)
 		    sc->eep_rev, ether_sprintf(ic->ic_macaddr));
 	}
 
-//	timeout_set(&sc->scan_to, athn_next_scan, sc);
-//	timeout_set(&sc->calib_to, athn_calib_to, sc);
-	// OpenBSD's timeout_set initializes function names and arguments
-	// FreeBSD's callout_init equivalent just creates the structure
 	callout_init(&sc->scan_to, 0);
 	callout_init(&sc->calib_to, 0);
 
 	mbufq_init(&sc->sc_snd, ifqmaxlen);
 
-#if 0 // Not used om FreeBSD
-	sc->amrr.amrr_min_success_threshold =  1;
-	sc->amrr.amrr_max_success_threshold = 15;
-
-#endif
-
 	ic->ic_phytype = IEEE80211_T_OFDM;	/* not only, but not used */
 	ic->ic_opmode = IEEE80211_M_STA;	/* default to BSS mode */
 	// XXX This will be moved to the VAP laye
-//	ic->ic_state = IEEE80211_S_INIT;
 
 	/* Set device capabilities. */
 	ic->ic_caps =
@@ -459,51 +428,16 @@ athn_attach(struct athn_softc *sc)
 	ic->ic_bsschan = &ic->ic_channels[0];
 
 	// THIS IS HANDLED AT THE VAP LEVEL!
-	/*
-	ifp->if_softc = sc;
-	ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
-	ifp->if_ioctl = athn_ioctl;
-	ifp->if_start = athn_start;
-	ifp->if_watchdog = athn_watchdog;
-	*/
-//	memcpy(ifp->if_xname, sc->sc_dev.dv_xname, IFNAMSIZ);
 
-//	if_attach(ifp);
 	ieee80211_ifattach(ic);
 
 	ic->ic_bsschan = &ic->ic_channels[0];
-//	ic->ic_raw_xmit = ??
 	ic->ic_scan_start = athn_scan_start;
-//	ic->sc_scan_curchan = ic->ic_scan_curchan;
-//	ic->ic_scan_curchan = ??
 	ic->ic_scan_end = athn_scan_end;
-//	ic->ic_update_chw = ??
 	ic->ic_getradiocaps = athn_getradiocaps;
 	// This function (ic_set_channel) appears to require a handler to LOCK/UNLOCK this function
 	ic->ic_set_channel = athn_set_channel;
-//	ic->ic_set_channel = athn_set_chan;
-	/*
-	ic->ic_transmit = ??
-	*/
 	ic->ic_parent = athn_parent;
-//	ic->ic_vap_create = athn_vap_create;
-//	ic->ic_vap_delete = athn_vap_delete; // Not finished
-	/*
-	ic->ic_wme.wme_update = ??
-	*/
-//	ic->ic_updateslot = athn_updateslot;
-	/*
-	ic->ic_update_promisc = ??
-	ic->ic_update_mcast = ??
-	*/
-//	ic->ic_node_alloc = athn_node_alloc;
-//	ic->ic_newassoc = athn_newassoc;
-
-	// This is being moved to athn_BUS_attach
-	/*
-	sc->sc_node_free = ic->ic_node_free;
-	ic->ic_node_free = ??
-	*/
 
 #if 0
 	ic->ic_node_alloc = athn_node_alloc;
@@ -2169,7 +2103,7 @@ athn_tx_reclaim(struct athn_softc *sc, int qid)
 		/* Link Tx buffer back to global free list. */
 		STAILQ_INSERT_TAIL(&sc->txbufs, bf, bf_list);
 #else
-	printf("athn_tx_reclaim DMA loop\n");
+		printf("athn_tx_reclaim DMA loop\n");
 #endif
 	}
 }
@@ -3021,7 +2955,6 @@ athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		break;
 	}
 
-//	return (sc->sc_newstate(ic, nstate, arg));
 	return (avp->newstate(vap, nstate, arg));
 }
 
@@ -3576,7 +3509,6 @@ athn_parent(struct ieee80211com *ic)
 		// PCI will call athn_stop, perhaps should make this a function pointer
 		// ie, sc->sc_stop
 		sc->sc_stop(sc);
-	//	athn_usb_stop(sc);
 	}
 }
 
@@ -3606,8 +3538,7 @@ athn_getradiocaps(struct ieee80211com *ic,
 	setbit(bands, IEEE80211_MODE_11NG);
 
 	ieee80211_add_channels_default_2ghz(chans, maxchans, nchans,
-		bands, 0); //(ic->ic_htcaps & IEEE80211_HTCAP, CHWIDTH40) ?
-//		NET80211_CBW_FLAG_HT40 : 0);
+	    bands, 0);
 }
 
 void
