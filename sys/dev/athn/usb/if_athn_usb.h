@@ -563,6 +563,12 @@ struct athn_usb_softc {
 //	STAILQ_HEAD(, athn_data)	tx_intr_queue;
 };
 
+
+struct athn_usb_newauth_cb_arg {
+	struct ieee80211_node *ni;
+	uint16_t seq;
+};
+
 #define MTAG_ATHN_COOKIE	0
 
 struct athn_signal_tag {
