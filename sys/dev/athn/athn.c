@@ -153,7 +153,7 @@ void		athn_setctstimeout(struct athn_softc *,
 		    struct ieee80211_channel *, int);
 void		athn_setclockrate(struct athn_softc *);
 void		athn_updateslot(struct ieee80211com *);
-void		athn_start(struct ifnet *);
+void		athn_start(struct athn_softc *);
 void		athn_watchdog(struct ifnet *);
 void		athn_set_multi(struct athn_softc *);
 int		athn_ioctl(struct ifnet *, u_long, caddr_t);
@@ -192,6 +192,7 @@ void		athn_getradiocaps(struct ieee80211com *ic,
 void		athn_scan_start(struct ieee80211com *ic);
 void		athn_scan_end(struct ieee80211com *ic);
 void		athn_drain_mbufq(struct athn_softc *);
+int		athn_transmit(struct ieee80211com *, struct mbuf *);
 
 void
 athn_config_ht(struct athn_softc *sc)
@@ -438,6 +439,7 @@ athn_attach(struct athn_softc *sc)
 	// This function (ic_set_channel) appears to require a handler to LOCK/UNLOCK this function
 	ic->ic_set_channel = athn_set_channel;
 	ic->ic_parent = athn_parent;
+	ic->ic_transmit = athn_transmit;
 
 #if 0
 	ic->ic_node_alloc = athn_node_alloc;
@@ -3096,8 +3098,32 @@ athn_updateslot(struct ieee80211com *ic)
 	athn_setctstimeout(sc, ic->ic_curchan, slot);
 }
 
+int
+athn_transmit(struct ieee80211com *ic, struct mbuf *m)
+{
+	struct athn_softc *sc = ic->ic_softc;
+	int error;
+
+	ATHN_LOCK(sc);
+	if (!sc->sc_running) {
+		ATHN_UNLOCK(sc);
+		return (ENXIO);
+	}
+
+	error = mbufq_enqueue(&sc->sc_snd, m);
+	if (error) {
+		ATHN_UNLOCK(sc);
+		return (error);
+	}
+
+	athn_start(sc);
+	ATHN_UNLOCK(sc);
+
+	return (0);
+}
+
 void
-athn_start(struct ifnet *ifp)
+athn_start(struct athn_softc *sc)
 {
 	printf("%s unimplemented...\n", __func__);
 #if 0
