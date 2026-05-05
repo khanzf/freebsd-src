@@ -3116,12 +3116,13 @@ athn_transmit(struct ieee80211com *ic, struct mbuf *m)
 		return (error);
 	}
 
-	athn_start(sc);
+	sc->sc_start(sc);
 	ATHN_UNLOCK(sc);
 
 	return (0);
 }
 
+/* This is likely a PCI-specific function */
 void
 athn_start(struct athn_softc *sc)
 {

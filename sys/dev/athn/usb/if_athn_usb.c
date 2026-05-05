@@ -181,7 +181,7 @@ void		athn_usb_rxeof(struct athn_usb_bulk_rx_data *, int, struct mbufq *);
 void		athn_usb_txeof(struct usbd_xfer *, void *);
 int		athn_usb_tx(struct athn_usb_softc *, struct ieee80211_node *, struct mbuf *,
 		    struct athn_usb_tx_data *, const struct ieee80211_bpf_params *);
-void		athn_usb_start(struct ifnet *);
+void		athn_usb_start(struct athn_softc *);
 void		athn_usb_watchdog(struct ifnet *);
 int		athn_usb_ioctl(struct ieee80211com *, u_long, void *);
 int		athn_usb_init(struct athn_softc *);
@@ -942,8 +942,6 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 //		return (NULL);
 //	}
 
-	printf("Creating a USB VAP\n");
-
 	if (opmode == IEEE80211_M_MONITOR) {
 		printf("Device is monitor mode\n");
 	}
@@ -985,7 +983,6 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 	//vap->iv_key_delete = sc->sc_key_delete;
 	//vap->iv_key_set = sc->sc_key_set;
 
-	printf("Returning vap good!\n");
 	return(vap);
 
 	//ifp = vap->iv_ifp;
@@ -1024,6 +1021,7 @@ athn_usb_attachhook(device_t self)
 	sc->sc_key_delete = athn_usb_delete_key;
 	sc->sc_key_set = athn_usb_set_key;
 	sc->sc_stop = athn_usb_stop;
+	sc->sc_start = athn_usb_start;
 
 	error = athn_attach(sc);
 	if (error != 0) {
@@ -3460,8 +3458,8 @@ athn_usb_tx(struct athn_usb_softc *usc, struct ieee80211_node *ni, struct mbuf *
 	}
 
 	/* Grab a Tx buffer from our free list. */
-	data = STAILQ_FIRST(&usc->usc_tx_inactive);
-	STAILQ_REMOVE(&usc->usc_tx_inactive, data, athn_usb_tx_data, next);
+//	data = STAILQ_FIRST(&usc->usc_tx_inactive);
+//	STAILQ_REMOVE(&usc->usc_tx_inactive, data, athn_usb_tx_data, next);
 
 //#if NBPFILTER > 0
 #if 0
@@ -3581,19 +3579,38 @@ athn_usb_tx(struct athn_usb_softc *usc, struct ieee80211_node *ni, struct mbuf *
 }
 
 void
-athn_usb_start(struct ifnet *ifp)
+athn_usb_start(struct athn_softc *sc)
 {
-	printf("%s unimplemented.\n", __func__);
-#if 0
-	struct athn_softc *sc = ifp->if_softc;
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct athn_usb_tx_data *bf;
+//	struct ieee80211com *ic = &sc->sc_ic;
 	struct ieee80211_node *ni;
 	struct mbuf *m;
 
-	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
+//	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
+//		return;
+
+	if (sc->sc_running == 0)
 		return;
 
+	while ((m = mbufq_dequeue(&sc->sc_snd)) != NULL) {
+		bf = athn_usb_tx_getbuf(usc);
+		if (bf == NULL) {
+			// Failed to start buffer, prepending
+			mbufq_prepend(&sc->sc_snd, m);
+		}
+
+		ni = (struct ieee80211_node *)m->m_pkthdr.rcvif;
+
+		if (athn_usb_tx(usc, ni, m, bf, NULL) != 0) {
+			athn_usb_tx_freebuf(usc, bf);
+//			ieeee80211_free_node(ni);
+			m_freem(m);
+			break;
+		}
+	}
+
+#if 0
 	for (;;) {
 		if (TAILQ_EMPTY(&usc->tx_free_list)) {
 			ifq_set_oactive(&ifp->if_snd);

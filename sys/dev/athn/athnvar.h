@@ -636,6 +636,7 @@ struct athn_softc {
 	int				(*sc_init)(struct athn_softc *);
 	struct mbufq 	sc_snd;
 	void			(*sc_stop)(struct athn_softc *);
+	void			(*sc_start)(struct athn_softc *);
 
 	/* Firmware-specific */
 	const char		*fwname;
