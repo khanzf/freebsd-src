@@ -358,9 +358,12 @@ athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct mbuf *m;
 	int actlen;
 	int rssi, nf;
+	int err;
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
+	printf("actlen: %d\n", actlen);
 
+	mbufq_init(&ml, 1024);
 	switch(USB_GET_STATE(xfer)) {
 	 case USB_ST_TRANSFERRED:
 		data = STAILQ_FIRST(&usc->usc_rx_active);
@@ -369,7 +372,7 @@ athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 			goto tr_setup;
 		}
 		STAILQ_REMOVE_HEAD(&usc->usc_rx_active, next);
-		// rxeof???
+		athn_usb_rxeof(data, actlen, &ml);
 		STAILQ_INSERT_TAIL(&usc->usc_rx_inactive, data, next);
 
 		/* XXX Fall through */
@@ -388,8 +391,6 @@ tr_setup:
 			usbd_xfer_max_len(xfer));
 		usbd_transfer_submit(xfer);
 
-		mbufq_init(&ml, 1024);
-		athn_usb_rxeof(data, actlen, &ml);
 
 		// TODO for Farhan: Get rssi and nf
 
@@ -404,10 +405,14 @@ tr_setup:
 			else
 				ni = NULL;
 
+			printf("%p %d %d %d\n", ni, rssi, nf, m->m_len);
+			viewframe(m);
+
 			if (ni != NULL)
-				ieee80211_input(ni, m, rssi, nf);
+				err = ieee80211_input(ni, m, rssi, nf);
 			else
-				ieee80211_input_all(ic, m, rssi, nf);
+				err = ieee80211_input_all(ic, m, rssi, nf);
+			printf("input ret %d\n", err);
 			ATHN_LOCK(sc);
 		}
 
@@ -3321,10 +3326,13 @@ athn_usb_rxeof(struct athn_usb_bulk_rx_data *data, int len, struct mbufq *ml)
 		if (__predict_true(pktlen <= MCLBYTES)) {
 			/* Allocate an mbuf to store the next pktlen bytes. */
 //			MGETHDR(m, M_NOWAIT, MT_DATA);
+			printf("pktlen is %d\n", pktlen);
 			m = m_get2(pktlen, M_NOWAIT, MT_DATA, M_PKTHDR);
+			printf("MHLEN  is %d\n", MHLEN);
 			if (__predict_true(m != NULL)) {
 				m->m_pkthdr.len = m->m_len = pktlen;
 				if (pktlen > MHLEN) {
+					printf("this condition\n");
 //					MCLGET(m, M_NOWAIT);
 //					if (!(m->m_flags & M_EXT)) {
 //						m_free(m);
