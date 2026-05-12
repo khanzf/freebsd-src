@@ -223,10 +223,10 @@ void		athn_updateslot(struct ieee80211com *);
 
 
 /* FreeBSD additions */
-void		athn_intr_tx_callback(struct usb_xfer *, usb_error_t);
-void		athn_data_rx_callback(struct usb_xfer *, usb_error_t);
-void		athn_data_tx_callback(struct usb_xfer *, usb_error_t);
-void		athn_intr_rx_callback(struct usb_xfer *, usb_error_t);
+void		athn_usb_intr_tx_callback(struct usb_xfer *, usb_error_t);
+void		athn_usb_data_rx_callback(struct usb_xfer *, usb_error_t);
+void		athn_usb_data_tx_callback(struct usb_xfer *, usb_error_t);
+void		athn_usb_intr_rx_callback(struct usb_xfer *, usb_error_t);
 int		athn_usb_raw_xmit(struct ieee80211_node *, struct mbuf *, const struct ieee80211_bpf_params *);
 static void	athn_usb_shutdown(struct athn_usb_softc *);
 int		athn_reset_power_on(struct athn_softc *sc);
@@ -296,7 +296,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
-		.callback = athn_data_tx_callback,
+		.callback = athn_usb_data_tx_callback,
 		.bufsize = 0x200,	// 512 bytes
 		.interval = USB_DEFAULT_INTERVAL,
 	},
@@ -308,7 +308,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 			.short_xfer_ok = 1,
 			.pipe_bof = 1
 		},
-		.callback = athn_data_rx_callback,
+		.callback = athn_usb_data_rx_callback,
 		.bufsize = 0x200,	// 512 bytes
 		.interval = USB_DEFAULT_INTERVAL,
 	},
@@ -320,7 +320,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 			.short_xfer_ok = 1,
 			.pipe_bof = 1
 		},
-		.callback = athn_intr_rx_callback,
+		.callback = athn_usb_intr_rx_callback,
 		.bufsize = 0x40,	// 64 bytes
 		.interval = 1
 	},
@@ -332,7 +332,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 			.short_xfer_ok = 1,
 			.pipe_bof = 1
 		},
-		.callback= athn_intr_tx_callback,
+		.callback= athn_usb_intr_tx_callback,
 		.bufsize = 0x200,	// 512 bytes
 		.timeout = ATHN_USB_CMD_TIMEOUT,
 		.interval = 1
