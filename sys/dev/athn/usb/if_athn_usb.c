@@ -289,8 +289,8 @@ static const STRUCT_USB_HOST_ID athn_devs[] = {
 static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 	[ATHN_TX_DATA] = {
 		.type = UE_BULK,
-		.endpoint = AR_PIPE_TX_DATA,
-		.direction = UE_DIR_TX,
+		.endpoint = UE_ADDR_ANY,
+		.direction = UE_DIR_OUT,
 		.flags = {
 			.short_xfer_ok = 1,
 			.force_short_xfer = 1,
@@ -302,8 +302,8 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 	},
 	[ATHN_RX_DATA] = {
 		.type = UE_BULK,
-		.endpoint = AR_PIPE_RX_DATA,
-		.direction = UE_DIR_RX,
+		.endpoint = UE_ADDR_ANY,
+		.direction = UE_DIR_IN,
 		.flags = {
 			.short_xfer_ok = 1,
 			.pipe_bof = 1
@@ -314,8 +314,8 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 	},
 	[ATHN_RX_INTR] = {
 		.type = UE_INTERRUPT,
-		.endpoint = AR_PIPE_RX_INTR,
-		.direction = UE_DIR_RX,
+		.endpoint = UE_ADDR_ANY,
+		.direction = UE_DIR_IN,
 		.flags = {
 			.short_xfer_ok = 1,
 			.pipe_bof = 1
@@ -326,8 +326,8 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 	},
 	[ATHN_TX_INTR] = {
 		.type = UE_INTERRUPT,
-		.endpoint = AR_PIPE_TX_INTR,
-		.direction = UE_DIR_TX,
+		.endpoint = UE_ADDR_ANY,
+		.direction = UE_DIR_OUT,
 		.flags = {
 			.short_xfer_ok = 1,
 			.pipe_bof = 1
@@ -405,8 +405,7 @@ tr_setup:
 			else
 				ni = NULL;
 
-			printf("%p %d %d %d\n", ni, rssi, nf, m->m_len);
-			viewframe(m);
+//			viewframe(m);
 
 			if (ni != NULL)
 				err = ieee80211_input(ni, m, rssi, nf);
@@ -443,6 +442,9 @@ athn_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct athn_usb_tx_data *data;
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
+	if (actlen <= 0) {
+		printf("This should not happen\n");
+	}
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
@@ -3326,9 +3328,7 @@ athn_usb_rxeof(struct athn_usb_bulk_rx_data *data, int len, struct mbufq *ml)
 		if (__predict_true(pktlen <= MCLBYTES)) {
 			/* Allocate an mbuf to store the next pktlen bytes. */
 //			MGETHDR(m, M_NOWAIT, MT_DATA);
-			printf("pktlen is %d\n", pktlen);
 			m = m_get2(pktlen, M_NOWAIT, MT_DATA, M_PKTHDR);
-			printf("MHLEN  is %d\n", MHLEN);
 			if (__predict_true(m != NULL)) {
 				m->m_pkthdr.len = m->m_len = pktlen;
 				if (pktlen > MHLEN) {
