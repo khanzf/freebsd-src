@@ -345,7 +345,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
  * Mutex entry state: Locked
  */
 void
-athn_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
+athn_usb_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
 	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
 	struct athn_softc *sc = &usc->sc_sc;
@@ -435,7 +435,7 @@ tr_setup:
 
 /* FreeBSD additions */
 void
-athn_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
+athn_usb_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
 	int actlen;
 	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
@@ -473,7 +473,7 @@ tr_setup:
 
 /* FreeBSD additions */
 void
-athn_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
+athn_usb_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 {
 	int actlen;
 	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
@@ -2923,7 +2923,7 @@ athn_usb_rx_wmi_ctrl(struct athn_usb_softc *usc, uint8_t *buf, int len)
 }
 
 void
-athn_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
+athn_usb_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 {
 	int actlen;
 	struct athn_usb_softc *usc = usbd_xfer_softc(xfer);
