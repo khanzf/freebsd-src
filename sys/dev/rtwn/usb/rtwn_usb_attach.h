@@ -21,6 +21,7 @@
 void	r92cu_attach(struct rtwn_usb_softc *);
 void	r92eu_attach(struct rtwn_usb_softc *);
 void	r88eu_attach(struct rtwn_usb_softc *);
+void	r88gu_attach(struct rtwn_usb_softc *);
 void	r12au_attach(struct rtwn_usb_softc *);
 void	r21au_attach(struct rtwn_usb_softc *);
 
@@ -28,6 +29,7 @@ enum {
 	RTWN_CHIP_RTL8192CU,
 	RTWN_CHIP_RTL8192EU,
 	RTWN_CHIP_RTL8188EU,
+	RTWN_CHIP_RTL8188GU,
 	RTWN_CHIP_RTL8812AU,
 	RTWN_CHIP_RTL8821AU,
 	RTWN_CHIP_MAX_USB
@@ -128,6 +130,12 @@ static const STRUCT_USB_HOST_ID rtwn_devs[] = {
 	RTWN_RTL8188EU_DEV(MERCUSYS,		MW150US),
 #undef RTWN_RTL8188EU_DEV
 
+	/* RTL8188GU */
+#define RTWN_RTL8188GU_DEV(v,p) \
+	{ USB_VPI(USB_VENDOR_##v, USB_PRODUCT_##v##_##p, RTWN_CHIP_RTL8188GU) }
+	RTWN_RTL8188GU_DEV(REALTEK,		RTL8188GU_1),
+#undef RTWN_RTL8188GU_DEV
+
 	/* RTL8812AU */
 #define RTWN_RTL8812AU_DEV(v,p) \
 	{ USB_VPI(USB_VENDOR_##v, USB_PRODUCT_##v##_##p, RTWN_CHIP_RTL8812AU) }
@@ -179,6 +187,7 @@ static const chip_usb_attach rtwn_chip_usb_attach[RTWN_CHIP_MAX_USB] = {
 	[RTWN_CHIP_RTL8192CU] = r92cu_attach,
 	[RTWN_CHIP_RTL8192EU] = r92eu_attach,
 	[RTWN_CHIP_RTL8188EU] = r88eu_attach,
+	[RTWN_CHIP_RTL8188GU] = r88gu_attach,
 	[RTWN_CHIP_RTL8812AU] = r12au_attach,
 	[RTWN_CHIP_RTL8821AU] = r21au_attach
 };
