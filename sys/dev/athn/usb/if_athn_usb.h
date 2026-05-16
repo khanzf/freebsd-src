@@ -422,7 +422,8 @@ struct ar_rx_status {
 
 #define ATHN_USB_HOST_CMD_RING_COUNT	32
 
-#define ATHN_USB_RXBUFSZ	(8 * 1024)	/* XXX Linux 16K */
+/*#define ATHN_USB_RXBUFSZ	(8 * 1024)	 XXX Linux 16K */
+#define ATHN_USB_RXBUFSZ	0x200
 #define ATHN_USB_TXBUFSZ			\
 	((sizeof(struct ar_stream_hdr) +	\
 	  sizeof(struct ar_htc_frame_hdr) +	\

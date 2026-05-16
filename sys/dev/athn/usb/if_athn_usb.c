@@ -233,8 +233,8 @@ int		athn_reset_power_on(struct athn_softc *sc);
 void		athn_stop_tx_dma(struct athn_softc *sc, int qid);
 void		athn_usb_tx_freebuf(struct athn_usb_softc *, struct athn_usb_tx_data *);
 struct		athn_usb_tx_data *athn_usb_tx_getbuf(struct athn_usb_softc *);
-int		athn_mbufq_enqueue_tag(struct mbufq *, struct mbuf *m, int, int);
-struct mbuf *	athn_mbufq_dequeue_tag(struct mbufq *, int *, int *);
+
+int wassent = 0;
 
 static void print_hex(const void *buffer, size_t length) {
     const uint8_t *buf = (const uint8_t *)buffer;
@@ -293,7 +293,6 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 		.direction = UE_DIR_OUT,
 		.flags = {
 			.short_xfer_ok = 1,
-			.force_short_xfer = 1,
 			.pipe_bof = 1
 		},
 		.callback = athn_usb_data_tx_callback,
@@ -309,7 +308,7 @@ static const struct usb_config athn_config_common[ATHN_N_TRANSFERS] = {
 			.pipe_bof = 1
 		},
 		.callback = athn_usb_data_rx_callback,
-		.bufsize = 0x200,	// 512 bytes
+		.bufsize = ATHN_USB_RXBUFSZ,	// 512 bytes
 		.interval = USB_DEFAULT_INTERVAL,
 	},
 	[ATHN_RX_INTR] = {
@@ -357,21 +356,23 @@ athn_usb_data_rx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct mbufq ml;
 	struct mbuf *m;
 	int actlen;
-	int rssi, nf;
 	int err;
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
-	printf("actlen: %d\n", actlen);
 
-	mbufq_init(&ml, 1024);
+	mbufq_init(&ml, 1024); // correct?
 	switch(USB_GET_STATE(xfer)) {
-	 case USB_ST_TRANSFERRED:
+	case USB_ST_TRANSFERRED:
+		DPRINTF(("TEST DPRINTF\n"));
 		data = STAILQ_FIRST(&usc->usc_rx_active);
 		if (data == NULL) {
 			printf("goto tr_setup\n");
 			goto tr_setup;
 		}
 		STAILQ_REMOVE_HEAD(&usc->usc_rx_active, next);
+		// Here we already have data->buf populated
+		// So I will print it out here so we can look at the contents.
+		// There are magic bytes that we should see after the first 2 bytes.
 		athn_usb_rxeof(data, actlen, &ml);
 		STAILQ_INSERT_TAIL(&usc->usc_rx_inactive, data, next);
 
@@ -391,11 +392,9 @@ tr_setup:
 			usbd_xfer_max_len(xfer));
 		usbd_transfer_submit(xfer);
 
-
 		// TODO for Farhan: Get rssi and nf
 
-		//while ((m=mbufq_dequeue(&ml)) != NULL) {
-		while ((m=athn_mbufq_dequeue_tag(&ml, &rssi, &nf)) != NULL) {
+		while ((m=mbufq_dequeue(&ml)) != NULL) {
 			ATHN_UNLOCK(sc);
 
 			wh = mtod(m, struct ieee80211_frame_min *);
@@ -407,25 +406,22 @@ tr_setup:
 
 //			viewframe(m);
 
-			if (ni != NULL)
-				err = ieee80211_input(ni, m, rssi, nf);
+			if (ni != NULL) {
+				err = ieee80211_input_mimo(ni, m);
+				ieee80211_free_node(ni);
+			}
 			else
-				err = ieee80211_input_all(ic, m, rssi, nf);
-			printf("input ret %d\n", err);
+				err = ieee80211_input_mimo_all(ic, m);
 			ATHN_LOCK(sc);
 		}
-
-/*
-		struct frame *newframe;
-		newframe = malloc(sizeof(struct frame), M_80211_VAP, M_WAITOK | M_ZERO);
-		newframe->size = usbd_xfer_max_len(xfer);
-		newframe->data = malloc(newframe->size, M_80211_VAP, M_WAITOK | M_ZERO);
-		memcpy(newframe->data, data->buf, newframe->size);
-*/
-//		STAILQ_INSERT_HEAD(&frame_list, newframe, next);
-		
 		break;
 	default: /* Error */
+		/* Copied from ural */
+		if (error != USB_ERR_CANCELLED) {
+		usbd_xfer_set_stall(xfer);
+			printf("Error, but setting up TR setup\n");
+			goto tr_setup;
+		}
 		break;
 	}
 
@@ -442,9 +438,6 @@ athn_usb_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	struct athn_usb_tx_data *data;
 
 	usbd_xfer_status(xfer, &actlen, NULL, NULL, NULL);
-	if (actlen <= 0) {
-		printf("This should not happen\n");
-	}
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
@@ -456,10 +449,21 @@ athn_usb_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 	case USB_ST_SETUP:
 tr_setup:
 		data = STAILQ_FIRST(&usc->usc_tx_pending);
-		if (data == NULL)
+		if (data == NULL) {
+			printf("usc_tx_pending is NULL at %d\n", __LINE__);
 			break;
+		}
 		STAILQ_REMOVE_HEAD(&usc->usc_tx_pending, next);
 		STAILQ_INSERT_TAIL(&usc->usc_tx_active, data, next);
+		/*
+		if (wassent == 0) {
+			printf("--- BEFORE XFER --\n");
+			printf("Length: %d\n", data->buflen);
+			print_hex(data->buf, data->buflen);
+			printf("--- AFTER  XFER --\n");
+			wassent++;
+		}
+		*/
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->buflen);
 		usbd_transfer_submit(xfer);
 		break;
@@ -1133,16 +1137,21 @@ athn_usb_raw_xmit(struct ieee80211_node *ni, struct mbuf *m, const struct ieee80
 	struct athn_usb_tx_data *bf;
 	int error = 0;
 
+	printf("raw xmit\n");
+
 	ATHN_LOCK(sc);
 	// XXX printf("The is-running step should be here\n");
 
+	/*
+	 * Taken off usc->usc_tx_inactive
+	 * Added into usc->usc_tx_pending in athn_usb_tx which does the USB transfer
+	 * Consumed and and placed back into inactive in athn_usb_data_tx_callback
+	 */
 	bf = athn_usb_tx_getbuf(usc);
 	if (bf == NULL) {
 		error = ENOBUFS;
 		goto error;
 	}
-	athn_usb_tx_freebuf(usc, bf);
-
 	if (athn_usb_tx(usc, ni, m, bf, params) != 0) {
 		printf("athn_usb_tx fails!\n");
 		error = EIO;
@@ -3087,50 +3096,6 @@ athn_usb_rx_radiotap(struct athn_softc *sc, struct mbuf *m,
 #endif
 }
 
-int
-athn_mbufq_enqueue_tag(struct mbufq *ml, struct mbuf *m, int rssi, int nf)
-{
-	struct m_tag *tag;
-	struct athn_signal_tag *sig;
-
-	tag = m_tag_alloc(MTAG_ATHN_COOKIE, 0, sizeof(struct athn_signal_tag), M_NOWAIT);
-	if (tag == NULL) {
-		m_free(m);
-		return (ENOMEM);
-	}
-
-	sig = (struct athn_signal_tag *)(tag + 1);
-	sig->rssi = rssi;
-	sig->nf = nf;
-
-	m_tag_prepend(m, tag);
-	return mbufq_enqueue(ml, m);
-}
-
-struct mbuf *
-athn_mbufq_dequeue_tag(struct mbufq *ml, int *rssi, int *nf)
-{
-	struct mbuf *m;
-	struct m_tag *tag;
-	struct athn_signal_tag *sig;
-
-	m = mbufq_dequeue(ml);
-	if (m == NULL)
-		return (NULL);
-
-	tag = m_tag_find(m, 0, NULL);
-	if (tag != NULL) {
-		sig = (struct athn_signal_tag *)(tag + 1);
-		*rssi = sig->rssi;
-		*nf = sig->nf;
-	} else {
-		*rssi = 0;
-		*nf = 0;
-	}
-
-	return (m);
-}
-
 void
 athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 {
@@ -3143,6 +3108,9 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 	if (__predict_false(m->m_len < sizeof(*htc)))
 		goto skip;
 	htc = mtod(m, struct ar_htc_frame_hdr *);
+	printf("htc: endpoint_id=%d, flags=%d, payload_len=%d\n",
+	    htc->endpoint_id, htc->flags, be16toh(htc->payload_len));
+
 	if (__predict_false(htc->endpoint_id == 0)) {
 		DPRINTF(("bad endpoint %d\n", htc->endpoint_id));
 		goto skip;
@@ -3204,8 +3172,8 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 
 	/* Send the frame to the 802.11 layer. */
 	rxi.r_flags = IEEE80211_R_NF | IEEE80211_R_RSSI;
-	rxi.c_nf = rs->rs_rssi;
-	rxi.c_rssi = AR_USB_DEFAULT_NF;
+	rxi.c_nf = AR_USB_DEFAULT_NF; // XXX Apparently Linux might do this correctly
+	rxi.c_rssi = rs->rs_rssi;
 
 //	rxi.rxi_rssi = rs->rs_rssi + AR_USB_DEFAULT_NF;
 //	rxi.rxi_tstamp = betoh64(rs->rs_tstamp);
@@ -3232,7 +3200,9 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 		goto skip;
 	}
 
-	if (athn_mbufq_enqueue_tag(ml, m, rs->rs_rssi, AR_USB_DEFAULT_NF)) {
+	printf("ieee80211_add_rx_params succeeded, rssi=%d, nf=%d\n", rxi.c_rssi, rxi.c_nf);
+
+	if (mbufq_enqueue(ml, m)) {
 		printf("Unable to queue mbuf\n");
 		goto skip;
 	}
@@ -3317,6 +3287,10 @@ athn_usb_rxeof(struct athn_usb_bulk_rx_data *data, int len, struct mbufq *ml)
 	KASSERT(stream->left == 0, ("stream->left is not 0"));
 	while (len >= sizeof(*hdr)) {
 		hdr = (struct ar_stream_hdr *)buf;
+
+
+		// XXX Debug: print stream header values
+		DPRINTF(("tag : %.8x htole16(AR_USB_RX_STREAM_TAG):%.8x hdr->len:%d\n",hdr->tag ,htole16(AR_USB_RX_STREAM_TAG),hdr->len));
 		if (hdr->tag != htole16(AR_USB_RX_STREAM_TAG)) {
 			DPRINTF(("invalid tag 0x%x\n", hdr->tag));
 			break;
@@ -3327,21 +3301,16 @@ athn_usb_rxeof(struct athn_usb_bulk_rx_data *data, int len, struct mbufq *ml)
 
 		if (__predict_true(pktlen <= MCLBYTES)) {
 			/* Allocate an mbuf to store the next pktlen bytes. */
-//			MGETHDR(m, M_NOWAIT, MT_DATA);
 			m = m_get2(pktlen, M_NOWAIT, MT_DATA, M_PKTHDR);
 			if (__predict_true(m != NULL)) {
-				m->m_pkthdr.len = m->m_len = pktlen;
-				if (pktlen > MHLEN) {
-					printf("this condition\n");
-//					MCLGET(m, M_NOWAIT);
-//					if (!(m->m_flags & M_EXT)) {
-//						m_free(m);
-//						m = NULL;
-//					}
-				}
+				m->m_pkthdr.len = pktlen;
+				m->m_len = pktlen;
 			}
-		} else	/* Drop frames larger than MCLBYTES. */
+		} else {
 			m = NULL;
+		}
+
+
 
 //		if (m == NULL)
 //			ifp->if_ierrors++;
@@ -3363,6 +3332,13 @@ athn_usb_rxeof(struct athn_usb_bulk_rx_data *data, int len, struct mbufq *ml)
 		if (__predict_true(m != NULL)) {
 			/* We have all the pktlen bytes in this xfer. */
 			memcpy(mtod(m, uint8_t *), buf, pktlen);
+
+			printf("Frame received, pktlen=%d, first 32 bytes: ", pktlen);
+			uint8_t *dbg = mtod(m, uint8_t *);
+			for(int i=0;i<min(32, pktlen);i++)
+				printf("%02x ", dbg[i]);
+			printf("\n");
+
 			athn_usb_rx_frame(usc, m, ml);
 		}
 
@@ -3548,6 +3524,10 @@ athn_usb_tx(struct athn_usb_softc *usc, struct ieee80211_node *ni, struct mbuf *
 //		printf("Last condition\n");
 		htc->endpoint_id = usc->ep_mgmt;
 
+		if (wassent == 0) {
+			printf("usc->ep_mgmt: %x\n", usc->ep_mgmt);
+		}
+
 		txm = (struct ar_tx_mgmt *)&htc[1];
 		memset(txm, 0, sizeof(*txm));
 		txm->node_idx = an->sta_index;
@@ -3568,6 +3548,7 @@ athn_usb_tx(struct athn_usb_softc *usc, struct ieee80211_node *ni, struct mbuf *
 //	xferlen = frm - data->buf;
 	data->buflen = frm - data->buf;
 
+	printf("Before Tx Transfer\n");
 	STAILQ_INSERT_TAIL(&usc->usc_tx_pending, data, next);
 	usbd_transfer_start(usc->usc_xfer[ATHN_TX_DATA]);
 
@@ -3598,14 +3579,31 @@ athn_usb_start(struct athn_softc *sc)
 //	if (!(ifp->if_flags & IFF_RUNNING) || ifq_is_oactive(&ifp->if_snd))
 //		return;
 
-	if (sc->sc_running == 0)
+	if (sc->sc_running == 0) {
+		printf("sc_running is 0, not transmitting\n");
 		return;
+	}
 
 	while ((m = mbufq_dequeue(&sc->sc_snd)) != NULL) {
+
+		/* Buffer taken out here */
 		bf = athn_usb_tx_getbuf(usc);
 		if (bf == NULL) {
 			// Failed to start buffer, prepending
 			mbufq_prepend(&sc->sc_snd, m);
+			printf("unable to get buffer, breaking in athn_usb_start\n");
+			printf("tx_inactive count before loop:\n");
+			int cnt = 0;
+			struct athn_usb_tx_data *iter;
+			STAILQ_FOREACH(iter, &usc->usc_tx_inactive, next) cnt++;
+			printf("Inactive: %d\n", cnt);
+			cnt = 0;
+			STAILQ_FOREACH(iter, &usc->usc_tx_active, next) cnt++;
+			printf("Active: %d\n", cnt);
+			cnt = 0;
+			STAILQ_FOREACH(iter, &usc->usc_tx_pending, next) cnt++;
+			printf("Pending: %d\n", cnt);
+			break;
 		}
 
 		ni = (struct ieee80211_node *)m->m_pkthdr.rcvif;
@@ -3895,6 +3893,7 @@ athn_usb_init(struct athn_softc *sc)
 
 	/* We're ready to go. */
 	sc->sc_running = 1;
+	printf("Setting sc->sc_running = 1\n");
 
 	printf("Stuff below this needs to be updated...\n");
 	ATHN_UNLOCK(sc);
@@ -4022,6 +4021,7 @@ athn_usb_stop(struct athn_softc *sc)
 	usc->rx_stream.left = 0;
 
 	sc->sc_running = 0;
+	printf("Setting sc->sc_running = 0\n");
 }
 
 static device_method_t athn_usb_methods[] = {
@@ -4046,4 +4046,6 @@ MODULE_VERSION(athn_usb, 1);
 MODULE_DEPEND(athn_usb, usb, 1, 1, 1);
 MODULE_DEPEND(athn_usb, wlan, 1, 1, 1);
 MODULE_DEPEND(athn_usb, athn, 1, 1, 1);
+//MODULE_DEPEND(athn_usb, athn-ar9271fw, 0f, 1, 1);
+
 USB_PNP_HOST_INFO(athn_devs);

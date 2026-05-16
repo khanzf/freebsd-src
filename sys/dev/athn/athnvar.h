@@ -27,10 +27,11 @@
 #ifdef notyet
 #define ATHN_BT_COEXISTENCE	1
 #endif
-
+#define ATHN_DEBUG 1
 #ifdef ATHN_DEBUG
 #define DPRINTF(x)	do { if (athn_debug > 0) printf x; } while (0)
-#define DPRINTFN(n, x)	do { if (athn_debug >= (n)) printf x; } while (0)
+/*#define DPRINTFN(n, x)	do { if (athn_debug >= (n)) printf x; } while (0)*/
+#define DPRINTFN(n, x)	do { if (athn_debug >= 0) printf x; } while (0)
 extern int athn_debug;
 #else
 #define DPRINTF(x)

@@ -65,10 +65,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/athn/athnreg.h>
 #include <dev/athn/athnvar.h>
 
-int debug_knob = 1;
-
-#define DEBUG_PRINTF(format, ...) if (debug_knob == 1) { printf("DEBUG: " format, ##__VA_ARGS__);}
-
+//#define ATHN_DEBUG 1
 #ifdef ATHN_DEBUG
 int athn_debug = 0;
 #endif
@@ -216,7 +213,6 @@ athn_config_ht(struct athn_softc *sc)
 	ic->ic_htextcaps = 0;
 //	ic->ic_htxcaps = 0;
 #ifdef notyet
-	DEBUG_PRINTF("not yet set\n");
 	if (AR_SREV_9271(sc) || AR_SREV_9287_10_OR_LATER(sc))
 		ic->ic_htcaps |= IEEE80211_HTCAP_SGI20;
 	if (AR_SREV_9380_10_OR_LATER(sc))
@@ -417,7 +413,6 @@ athn_attach(struct athn_softc *sc)
 
 	for(int i = 0;i<ic->ic_nchans;i++) {
 		if (ic->ic_channels[i].ic_flags == 0) {
-			DEBUG_PRINTF("Flags is 0\n");
 			ic->ic_channels[i].ic_flags = 0x0;
 		}
 	}
@@ -536,11 +531,9 @@ athn_get_chanlist(struct athn_softc *sc)
 			if (sc->flags & ATHN_FLAG_11N)
 				ic->ic_channels[chan].ic_flags |=
 				    IEEE80211_CHAN_HT;
-			DEBUG_PRINTF("2g Chan: %d 0x%02x\n", chan, ic->ic_channels[chan].ic_flags);
 		}
 	}
 	if (sc->flags & ATHN_FLAG_11A) {
-		DEBUG_PRINTF("Adding 5ghz channels...\n");
 		ic->ic_nchans += nitems(athn_5ghz_chans);
 		for (i = 0; i < nitems(athn_5ghz_chans); i++) {
 			chan = athn_5ghz_chans[i];
@@ -550,7 +543,6 @@ athn_get_chanlist(struct athn_softc *sc)
 			if (sc->flags & ATHN_FLAG_11N)
 				ic->ic_channels[chan].ic_flags |=
 				    IEEE80211_CHAN_HT;
-			DEBUG_PRINTF("5g Chan: %d 0x%02x\n", chan, ic->ic_channels[chan].ic_flags);
 		}
 	}
 }
@@ -1113,7 +1105,6 @@ athn_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 		goto reset;
 
 	athn_set_chan(ic);
-	DEBUG_PRINTF("Need to figure out if an error here occurs...\n");
 	athn_rx_start(sc);
 
 	/* Re-enable interrupts. */
@@ -1124,7 +1115,6 @@ reset:		/* Error found, try a full reset. */
 	DPRINTFN(3, ("needs a full reset\n"));
 	error = athn_hw_reset(sc, c, extc, 0);
 	if (error != 0)	{ /* Hopeless case. */
-		DEBUG_PRINTF("Channel error occurs %d\n", error);
 		return (error);
 	}
 
@@ -2873,31 +2863,25 @@ athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 
 	switch (nstate) {
 	case IEEE80211_S_INIT:
-		DEBUG_PRINTF("Mode: IEEE80211_S_INIT\n");
 		athn_set_led(sc, 0);
 		break;
 	case IEEE80211_S_SCAN:
-		DEBUG_PRINTF("Mode: IEEE80211_S_SCAN\n");
 		/* Make the LED blink while scanning. */
 		athn_set_led(sc, !sc->led_state);
 		error = athn_switch_chan(sc, vap->iv_bss->ni_chan, NULL);
 		if (error != 0)
 			return (error);
-		DEBUG_PRINTF("New state needs to fix scan_to time\n");
 		//timeout_add_msec(&sc->scan_to, 200);
 		break;
 	case IEEE80211_S_AUTH:
-		DEBUG_PRINTF("Mode: IEEE80211_S_AUTH\n");
 		athn_set_led(sc, 0);
 		error = athn_switch_chan(sc, vap->iv_bss->ni_chan, NULL);
 		if (error != 0)
 			return (error);
 		break;
 	case IEEE80211_S_ASSOC:
-		DEBUG_PRINTF("Mode: IEEE80211_S_ASSOC\n");
 		break;
 	case IEEE80211_S_RUN:
-		DEBUG_PRINTF("Mode: IEEE80211_S_RUN\n");
 		athn_set_led(sc, 1);
 //#ifndef IEEE80211_STA_ONLY
 		if (ic->ic_opmode == IEEE80211_M_HOSTAP) {
@@ -2953,7 +2937,6 @@ athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	case IEEE80211_S_CSA:
 	case IEEE80211_S_SLEEP:
 	default:
-		DEBUG_PRINTF("default case\n");
 		break;
 	}
 
@@ -3524,7 +3507,6 @@ static void
 athn_parent(struct ieee80211com *ic)
 {
 	struct athn_softc *sc = ic->ic_softc;
-	DEBUG_PRINTF("%s under implemented...\n", __func__);
 
 	if (ic->ic_nrunning > 0) {
 		if (sc->sc_init(sc) == 0) {

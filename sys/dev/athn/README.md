@@ -25,3 +25,5 @@ AR_WMI_CMD_VAP_CREATE into vap creation
 Rx mbuf handling
 Device VAP management
 USB drain functionality
+The raw_xmit and athn_transmit should not take the data off usc->usc_inactive, it should be done in athn_usb_tx
+It might be possible to read the real device noise floor (NF), check the Linux driver implementation
