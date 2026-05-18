@@ -891,7 +891,7 @@ athn_usb_detach(device_t self)
 	 *            htc_handle->drv_priv->ah->ah_flags |= AH_UNPLUGGED;
 	 */
 	if (unplugged)
-		usc->flags |= ATHN_USB_FLAG_UNPLUGGED;
+		usc->usc_unplugged = true;
 
 	/*
 	 * Phase 3: Deinit the 802.11 stack, free TX/RX buffers, and tear

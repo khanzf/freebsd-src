@@ -503,7 +503,8 @@ struct athn_usb_softc {
 
 	u_int				flags;
 #define ATHN_USB_FLAG_AR7010		0x01
-#define ATHN_USB_FLAG_UNPLUGGED		0x02
+
+	bool				usc_unplugged;
 
 	struct athn_usb_rx_stream	rx_stream;
 
