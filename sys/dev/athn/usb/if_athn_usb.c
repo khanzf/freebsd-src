@@ -894,28 +894,43 @@ athn_usb_detach(device_t self)
 		usc->usc_unplugged = true;
 
 	/*
-	 * Phase 3: Deinit the 802.11 stack, free TX/RX buffers, and tear
-	 * down the hardware.  Corresponds to ath9k_htc_hw_deinit(), which
-	 * wraps ath9k_htc_disconnect_device().
+	 * Phase 3a: Deinit the 802.11 stack, free TX/RX buffers, and tear
+	 * down the hardware.
 	 *
-	 * Linux: ath9k_htc_hw_deinit(hif_dev->htc_handle, unplugged)
-	 *   --> ath9k_htc_disconnect_device(target, hot_unplug)
-	 *         --> ath9k_deinit_device(priv):
-	 *               wiphy_rfkill_stop_polling(hw->wiphy)  -- no FreeBSD equivalent
-	 *               ath9k_deinit_leds(priv)               --> athn_set_led(sc, 0)
-	 *               ath9k_htc_deinit_debug(priv)          -- no FreeBSD equivalent
-	 *               ieee80211_unregister_hw(hw)           --> ieee80211_ifdetach(ic)
-	 *               ath9k_rx_cleanup(priv)                --> athn_usb_free_rx_list(usc)
-	 *               ath9k_tx_cleanup(priv)                --> athn_usb_free_tx_list(usc)
-	 *                                                         athn_usb_free_tx_cmd(usc)
-	 *               ath9k_deinit_priv(priv)               --> athn_detach(sc)
-	 *         --> ath9k_stop_wmi(priv)                    --> cv_broadcast(&usc->cv_cmd)
-	 *                                                         cv_broadcast(&usc->cv_msg)
-	 *         --> ath9k_hif_usb_dealloc_urbs(hif_dev)     --> athn_usb_close_pipes(usc)
-	 *         --> ath9k_destroy_wmi(priv)                 --> cv_destroy(&usc->cv_cmd)
-	 *                                                         cv_destroy(&usc->cv_msg)
-	 *         --> ieee80211_free_hw(hw)                   --> mtx_destroy(&sc->sc_mtx)
-	 *   --> ath9k_htc_hw_free(hif_dev->htc_handle)        -- softc freed by USB bus driver
+	 * Linux: ath9k_deinit_device(priv):
+	 *   wiphy_rfkill_stop_polling(hw->wiphy)  -- no FreeBSD equivalent
+	 *   ath9k_deinit_leds(priv)               --> athn_set_led(sc, 0)
+	 *   ath9k_htc_deinit_debug(priv)          -- no FreeBSD equivalent
+	 *   ieee80211_unregister_hw(hw)           --> ieee80211_ifdetach(ic)
+	 *   ath9k_rx_cleanup(priv)                --> athn_usb_free_rx_list(usc)
+	 *   ath9k_tx_cleanup(priv)                --> athn_usb_free_tx_list(usc)
+	 *                                             athn_usb_free_tx_cmd(usc)
+	 *   ath9k_deinit_priv(priv)               --> athn_detach(sc)  [stub, not yet implemented]
+	 */
+	athn_set_led(sc, 0);
+	ieee80211_ifdetach(ic);
+	athn_usb_free_rx_list(usc);
+	athn_usb_free_tx_list(usc);
+	athn_usb_free_tx_cmd(usc);
+	athn_detach(sc);
+
+	/*
+	 * Phase 3b: Stop WMI — wake any threads sleeping in athn_usb_wmi_xcmd
+	 * waiting for a response that will never arrive.
+	 *
+	 * Linux: ath9k_stop_wmi(priv)             --> cv_broadcast(&usc->cv_cmd)
+	 *                                             cv_broadcast(&usc->cv_msg)
+	 */
+
+	/*
+	 * Phase 3c: Tear down USB transfers, destroy WMI state, and release
+	 * the hardware allocation.
+	 *
+	 * Linux: ath9k_hif_usb_dealloc_urbs(hif_dev) --> athn_usb_close_pipes(usc)
+	 *        ath9k_destroy_wmi(priv)               --> cv_destroy(&usc->cv_cmd)
+	 *                                                  cv_destroy(&usc->cv_msg)
+	 *        ieee80211_free_hw(hw)                 --> mtx_destroy(&sc->sc_mtx)
+	 *        ath9k_htc_hw_free(hif_dev->htc_handle) -- softc freed by USB bus driver
 	 */
 
 	/*
