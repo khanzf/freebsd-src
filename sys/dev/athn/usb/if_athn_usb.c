@@ -894,24 +894,22 @@ athn_usb_detach(device_t self)
 		usc->usc_unplugged = true;
 
 	/*
-	 * Phase 3a: Deinit the 802.11 stack, free TX/RX buffers, and tear
-	 * down the hardware.
+	 * Phase 3a: Deinit the 802.11 stack and hardware.  TX/RX buffer frees
+	 * are deferred to the end of detach so the buffers remain valid while
+	 * pipes are still being torn down in later phases.
 	 *
 	 * Linux: ath9k_deinit_device(priv):
 	 *   wiphy_rfkill_stop_polling(hw->wiphy)  -- no FreeBSD equivalent
 	 *   ath9k_deinit_leds(priv)               --> athn_set_led(sc, 0)
 	 *   ath9k_htc_deinit_debug(priv)          -- no FreeBSD equivalent
 	 *   ieee80211_unregister_hw(hw)           --> ieee80211_ifdetach(ic)
-	 *   ath9k_rx_cleanup(priv)                --> athn_usb_free_rx_list(usc)
-	 *   ath9k_tx_cleanup(priv)                --> athn_usb_free_tx_list(usc)
-	 *                                             athn_usb_free_tx_cmd(usc)
+	 *   ath9k_rx_cleanup(priv)                --> athn_usb_free_rx_list(usc)  [deferred]
+	 *   ath9k_tx_cleanup(priv)                --> athn_usb_free_tx_list(usc)  [deferred]
+	 *                                             athn_usb_free_tx_cmd(usc)   [deferred]
 	 *   ath9k_deinit_priv(priv)               --> athn_detach(sc)  [stub, not yet implemented]
 	 */
 	athn_set_led(sc, 0);
 	ieee80211_ifdetach(ic);
-	athn_usb_free_rx_list(usc);
-	athn_usb_free_tx_list(usc);
-	athn_usb_free_tx_cmd(usc);
 	athn_detach(sc);
 
 	/*
@@ -954,6 +952,15 @@ athn_usb_detach(device_t self)
 	 *
 	 *   -- softc is freed by the USB bus driver; no explicit free needed.
 	 */
+
+	/* Free TX/RX buffers last, after all pipes are closed and no further
+	 * DMA activity can reference them.
+	 *
+	 * Linux: ath9k_rx_cleanup(priv) / ath9k_tx_cleanup(priv)
+	 */
+	athn_usb_free_rx_list(usc);
+	athn_usb_free_tx_list(usc);
+	athn_usb_free_tx_cmd(usc);
 
 	return (0);
 }
