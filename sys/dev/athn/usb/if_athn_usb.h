@@ -502,7 +502,8 @@ struct athn_usb_softc {
 	struct task			usc_task;
 
 	u_int				flags;
-#define ATHN_USB_FLAG_AR7010	0x01
+#define ATHN_USB_FLAG_AR7010		0x01
+#define ATHN_USB_FLAG_UNPLUGGED		0x02
 
 	struct athn_usb_rx_stream	rx_stream;
 
