@@ -867,6 +867,7 @@ athn_usb_detach(device_t self)
 	struct athn_usb_softc *usc = device_get_softc(self);
 	struct athn_softc     *sc  = &usc->sc_sc;
 	struct ieee80211com   *ic  = &sc->sc_ic;
+	bool                   unplugged;
 
 	/*
 	 * Phase 1: Detect whether the device was physically unplugged or
@@ -879,6 +880,8 @@ athn_usb_detach(device_t self)
 	 *   --> bool unplugged = (usbd_get_state(usc->sc_udev) == USB_STATE_DETACHED);
 	 *       taskqueue_drain(taskqueue_thread, &usc->usc_task);
 	 */
+	unplugged = (usb_get_device_state(usc->sc_udev) == USB_STATE_DETACHED);
+	taskqueue_drain(taskqueue_thread, &usc->usc_task);
 
 	/*
 	 * Phase 2: Mark device as gone so in-flight WMI commands bail out
