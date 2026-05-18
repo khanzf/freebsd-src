@@ -869,7 +869,19 @@ athn_usb_detach(device_t self)
 	struct ieee80211com   *ic  = &sc->sc_ic;
 
 	/*
-	 * Phase 1: Mark device as gone so in-flight WMI commands bail out
+	 * Phase 1: Detect whether the device was physically unplugged or
+	 * cleanly detached, and wait for any in-progress firmware load to
+	 * complete before proceeding.
+	 *
+	 * Linux: bool unplugged = (udev->state == USB_STATE_NOTATTACHED);
+	 *        wait_for_completion(&hif_dev->fw_done);
+	 *
+	 *   --> bool unplugged = (usbd_get_state(usc->sc_udev) == USB_STATE_DETACHED);
+	 *       taskqueue_drain(taskqueue_thread, &usc->usc_task);
+	 */
+
+	/*
+	 * Phase 2: Mark device as gone so in-flight WMI commands bail out
 	 * early rather than waiting for a response from a detached device.
 	 *
 	 * Linux: if (hotunplug)
@@ -877,48 +889,50 @@ athn_usb_detach(device_t self)
 	 */
 
 	/*
-	 * Phase 2: Deinit the 802.11 stack, free TX/RX buffers, and tear
-	 * down the hardware.
+	 * Phase 3: Deinit the 802.11 stack, free TX/RX buffers, and tear
+	 * down the hardware.  Corresponds to ath9k_htc_hw_deinit(), which
+	 * wraps ath9k_htc_disconnect_device().
 	 *
-	 * Linux: ath9k_deinit_device(htc_handle->drv_priv)
-	 *   which calls in order:
-	 *     wiphy_rfkill_stop_polling(hw->wiphy)  -- no FreeBSD equivalent
-	 *     ath9k_deinit_leds(priv)               --> athn_set_led(sc, 0)
-	 *     ath9k_htc_deinit_debug(priv)          -- no FreeBSD equivalent
-	 *     ieee80211_unregister_hw(hw)           --> ieee80211_ifdetach(ic)
-	 *     ath9k_rx_cleanup(priv)                --> athn_usb_free_rx_list(usc)
-	 *     ath9k_tx_cleanup(priv)                --> athn_usb_free_tx_list(usc)
-	 *                                               athn_usb_free_tx_cmd(usc)
-	 *     ath9k_deinit_priv(priv)               --> athn_detach(sc)
+	 * Linux: ath9k_htc_hw_deinit(hif_dev->htc_handle, unplugged)
+	 *   --> ath9k_htc_disconnect_device(target, hot_unplug)
+	 *         --> ath9k_deinit_device(priv):
+	 *               wiphy_rfkill_stop_polling(hw->wiphy)  -- no FreeBSD equivalent
+	 *               ath9k_deinit_leds(priv)               --> athn_set_led(sc, 0)
+	 *               ath9k_htc_deinit_debug(priv)          -- no FreeBSD equivalent
+	 *               ieee80211_unregister_hw(hw)           --> ieee80211_ifdetach(ic)
+	 *               ath9k_rx_cleanup(priv)                --> athn_usb_free_rx_list(usc)
+	 *               ath9k_tx_cleanup(priv)                --> athn_usb_free_tx_list(usc)
+	 *                                                         athn_usb_free_tx_cmd(usc)
+	 *               ath9k_deinit_priv(priv)               --> athn_detach(sc)
+	 *         --> ath9k_stop_wmi(priv)                    --> cv_broadcast(&usc->cv_cmd)
+	 *                                                         cv_broadcast(&usc->cv_msg)
+	 *         --> ath9k_hif_usb_dealloc_urbs(hif_dev)     --> athn_usb_close_pipes(usc)
+	 *         --> ath9k_destroy_wmi(priv)                 --> cv_destroy(&usc->cv_cmd)
+	 *                                                         cv_destroy(&usc->cv_msg)
+	 *         --> ieee80211_free_hw(hw)                   --> mtx_destroy(&sc->sc_mtx)
+	 *   --> ath9k_htc_hw_free(hif_dev->htc_handle)        -- softc freed by USB bus driver
 	 */
 
 	/*
-	 * Phase 3: Stop WMI — wake any threads sleeping in athn_usb_wmi_xcmd
-	 * waiting for a response that will never arrive.
+	 * Phase 4: If this was a clean detach (not a physical unplug), send
+	 * a reboot command to return the device to its first-stage bootloader,
+	 * making it re-enumerable without a power cycle.
 	 *
-	 * Linux: ath9k_stop_wmi(htc_handle->drv_priv)
-	 *   which sets wmi->stopped = true under a mutex, then signals waiters.
+	 * Linux: if (!unplugged && (hif_dev->flags & HIF_USB_READY))
+	 *            ath9k_hif_usb_reboot(udev);
+	 *   which sends 0xffffffff as a 4-byte interrupt OUT message to
+	 *   USB_REG_OUT_PIPE (the TX interrupt endpoint, AR_PIPE_TX_INTR).
 	 *
-	 *   --> cv_broadcast(&usc->cv_cmd)
-	 *       cv_broadcast(&usc->cv_msg)
+	 *   --> if (!unplugged)
+	 *           athn_usb_reboot(usc);
 	 */
 
 	/*
-	 * Phase 4: Tear down all USB bulk and interrupt transfers.
+	 * Phase 5: Release the hif_device_usb allocation.
 	 *
-	 * Linux: ath9k_hif_usb_dealloc_urbs(htc_handle->hif_dev)
-	 *   which calls:
-	 *     ath9k_hif_usb_dealloc_tx_urbs()  \
-	 *     ath9k_hif_usb_dealloc_rx_urbs()   --> athn_usb_close_pipes(usc)
-	 */
-
-	/*
-	 * Phase 5: Destroy WMI state and release the hardware allocation.
+	 * Linux: kfree(hif_dev);
 	 *
-	 * Linux: ath9k_destroy_wmi(htc_handle->drv_priv)  --> cv_destroy(&usc->cv_cmd)
-	 *                                                      cv_destroy(&usc->cv_msg)
-	 *        ieee80211_free_hw(htc_handle->drv_priv->hw) --> mtx_destroy(&sc->sc_mtx)
-	 *   (softc memory is freed by the USB bus driver, not explicitly here)
+	 *   -- softc is freed by the USB bus driver; no explicit free needed.
 	 */
 
 	return (0);
