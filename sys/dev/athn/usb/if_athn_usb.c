@@ -865,61 +865,61 @@ int
 athn_usb_detach(device_t self)
 {
 	struct athn_usb_softc *usc = device_get_softc(self);
-	struct athn_softc *sc = &usc->sc_sc;
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct athn_softc     *sc  = &usc->sc_sc;
+	struct ieee80211com   *ic  = &sc->sc_ic;
 
+	/*
+	 * Phase 1: Mark device as gone so in-flight WMI commands bail out
+	 * early rather than waiting for a response from a detached device.
+	 *
+	 * Linux: if (hotunplug)
+	 *            htc_handle->drv_priv->ah->ah_flags |= AH_UNPLUGGED;
+	 */
 
-	athn_usb_shutdown(usc);
+	/*
+	 * Phase 2: Deinit the 802.11 stack, free TX/RX buffers, and tear
+	 * down the hardware.
+	 *
+	 * Linux: ath9k_deinit_device(htc_handle->drv_priv)
+	 *   which calls in order:
+	 *     wiphy_rfkill_stop_polling(hw->wiphy)  -- no FreeBSD equivalent
+	 *     ath9k_deinit_leds(priv)               --> athn_set_led(sc, 0)
+	 *     ath9k_htc_deinit_debug(priv)          -- no FreeBSD equivalent
+	 *     ieee80211_unregister_hw(hw)           --> ieee80211_ifdetach(ic)
+	 *     ath9k_rx_cleanup(priv)                --> athn_usb_free_rx_list(usc)
+	 *     ath9k_tx_cleanup(priv)                --> athn_usb_free_tx_list(usc)
+	 *                                               athn_usb_free_tx_cmd(usc)
+	 *     ath9k_deinit_priv(priv)               --> athn_detach(sc)
+	 */
 
-	ATHN_LOCK(sc);
-	cv_broadcast(&usc->cv_cmd);
-	cv_broadcast(&usc->cv_msg);
-	ATHN_UNLOCK(sc);
+	/*
+	 * Phase 3: Stop WMI — wake any threads sleeping in athn_usb_wmi_xcmd
+	 * waiting for a response that will never arrive.
+	 *
+	 * Linux: ath9k_stop_wmi(htc_handle->drv_priv)
+	 *   which sets wmi->stopped = true under a mutex, then signals waiters.
+	 *
+	 *   --> cv_broadcast(&usc->cv_cmd)
+	 *       cv_broadcast(&usc->cv_msg)
+	 */
 
-//	if (sc->sc_running == 1)
-//		athn_usb_stop(sc);
-//	else
-//		printf("Unnecessary to run athn_usb_stop when its already stopped..\n");
+	/*
+	 * Phase 4: Tear down all USB bulk and interrupt transfers.
+	 *
+	 * Linux: ath9k_hif_usb_dealloc_urbs(htc_handle->hif_dev)
+	 *   which calls:
+	 *     ath9k_hif_usb_dealloc_tx_urbs()  \
+	 *     ath9k_hif_usb_dealloc_rx_urbs()   --> athn_usb_close_pipes(usc)
+	 */
 
-//	usbd_transfer_unsetup(usc->usc_xfer, ATHN_N_TRANSFERS);
-
-//	if (usc->sc_athn_attached) {
-//		printf("Going into athn_detach\n");
-	printf("Put this back in, out of athn_detach\n");
-//	athn_detach(sc);
-//		printf("Post athn_detach\n");
-//	}
-
-	/* Wait for all async commands to complete. */
-//	athn_usb_wait_async(usc);
-
-//	usbd_ref_wait(usc->sc_udev);
-
-	/* Abort and close Tx/Rx pipes. */
-	printf("Before close pipes\n");
-	athn_usb_close_pipes(usc);
-	printf("After close pipes\n");
-
-	ATHN_LOCK(sc);
-	sc->sc_attached = 0;
-	ATHN_UNLOCK(sc);
-
-	/* Free Tx/Rx buffers. */
-	printf("Freeing buffers 1\n");
-	athn_usb_free_tx_cmd(usc);
-	printf("Freeing buffers 2\n");
-//	athn_usb_free_tx_list(usc);		// Disabling this for now, re-enable it later
-	printf("Freeing buffers 3\n");
-	athn_usb_free_rx_list(usc);
-	printf("Freeing buffers 4\n");
-
-	printf("ieee80211_ifdetach next\n");
-	ieee80211_ifdetach(ic);
-	cv_destroy(&usc->cv_cmd);
-	cv_destroy(&usc->cv_msg);
-	printf("Destroy mutex\n");
-	mtx_destroy(&sc->sc_mtx);
-	printf("end of destroy\n");
+	/*
+	 * Phase 5: Destroy WMI state and release the hardware allocation.
+	 *
+	 * Linux: ath9k_destroy_wmi(htc_handle->drv_priv)  --> cv_destroy(&usc->cv_cmd)
+	 *                                                      cv_destroy(&usc->cv_msg)
+	 *        ieee80211_free_hw(htc_handle->drv_priv->hw) --> mtx_destroy(&sc->sc_mtx)
+	 *   (softc memory is freed by the USB bus driver, not explicitly here)
+	 */
 
 	return (0);
 }
