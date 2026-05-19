@@ -229,6 +229,7 @@ void		athn_usb_data_tx_callback(struct usb_xfer *, usb_error_t);
 void		athn_usb_intr_rx_callback(struct usb_xfer *, usb_error_t);
 int		athn_usb_raw_xmit(struct ieee80211_node *, struct mbuf *, const struct ieee80211_bpf_params *);
 static void	athn_usb_shutdown(struct athn_usb_softc *);
+static void	athn_usb_reboot(struct athn_usb_softc *);
 int		athn_reset_power_on(struct athn_softc *sc);
 void		athn_stop_tx_dma(struct athn_softc *sc, int qid);
 void		athn_usb_tx_freebuf(struct athn_usb_softc *, struct athn_usb_tx_data *);
@@ -861,6 +862,29 @@ error:
 */
 }
 
+/*
+ * Send a reboot command to the device to return it to its first-stage
+ * bootloader, making it re-enumerable without a power cycle.
+ *
+ * Linux: ath9k_hif_usb_reboot() sends 0xffffffff via usb_interrupt_msg()
+ * to USB_REG_OUT_PIPE (the interrupt OUT endpoint, AR_PIPE_TX_INTR).
+ * We use the existing ATHN_TX_INTR xfer and tx_cmd buffer; the transfer
+ * will be drained by athn_usb_close_pipes() in Phase 3c.
+ */
+static void
+athn_usb_reboot(struct athn_usb_softc *usc)
+{
+	struct athn_softc *sc = &usc->sc_sc;
+	uint32_t reboot_cmd = 0xffffffff;
+
+	memcpy(usc->tx_cmd.buf, &reboot_cmd, sizeof(reboot_cmd));
+	usc->tx_cmd.buflen = sizeof(reboot_cmd);
+
+	ATHN_LOCK(sc);
+	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
+	ATHN_UNLOCK(sc);
+}
+
 int
 athn_usb_detach(device_t self)
 {
@@ -929,6 +953,25 @@ athn_usb_detach(device_t self)
 	ATHN_UNLOCK(sc);
 
 	/*
+	 * Phase 4: If this was a clean detach (not a physical unplug), send
+	 * a reboot command to return the device to its first-stage bootloader,
+	 * making it re-enumerable without a power cycle.
+	 *
+	 * Linux: if (!unplugged && (hif_dev->flags & HIF_USB_READY))
+	 *            ath9k_hif_usb_reboot(udev);
+	 *   which sends 0xffffffff as a 4-byte interrupt OUT message to
+	 *   USB_REG_OUT_PIPE (the TX interrupt endpoint, AR_PIPE_TX_INTR).
+	 *
+	 * Note: placed before Phase 3c so the TX interrupt pipe is still open.
+	 * athn_usb_close_pipes() in Phase 3c will drain the in-flight transfer.
+	 *
+	 *   --> if (!unplugged)
+	 *           athn_usb_reboot(usc);
+	 */
+	if (!unplugged)
+		athn_usb_reboot(usc);
+
+	/*
 	 * Phase 3c: Tear down USB transfers, destroy WMI state, and release
 	 * the hardware allocation.
 	 *
@@ -942,20 +985,6 @@ athn_usb_detach(device_t self)
 	cv_destroy(&usc->cv_cmd);
 	cv_destroy(&usc->cv_msg);
 	mtx_destroy(&sc->sc_mtx);
-
-	/*
-	 * Phase 4: If this was a clean detach (not a physical unplug), send
-	 * a reboot command to return the device to its first-stage bootloader,
-	 * making it re-enumerable without a power cycle.
-	 *
-	 * Linux: if (!unplugged && (hif_dev->flags & HIF_USB_READY))
-	 *            ath9k_hif_usb_reboot(udev);
-	 *   which sends 0xffffffff as a 4-byte interrupt OUT message to
-	 *   USB_REG_OUT_PIPE (the TX interrupt endpoint, AR_PIPE_TX_INTR).
-	 *
-	 *   --> if (!unplugged)
-	 *           athn_usb_reboot(usc);
-	 */
 
 	/*
 	 * Phase 5: Release the hif_device_usb allocation.
