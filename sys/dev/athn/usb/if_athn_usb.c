@@ -990,9 +990,12 @@ athn_usb_detach(device_t self)
 	 * Phase 5: Release the hif_device_usb allocation.
 	 *
 	 * Linux: kfree(hif_dev);
+	 *        dev_info(&udev->dev, "ath9k_htc: USB layer deinitialized\n");
 	 *
 	 *   -- softc is freed by the USB bus driver; no explicit free needed.
+	 *   --> device_printf(sc->sc_dev, "USB layer deinitialized\n");
 	 */
+	device_printf(sc->sc_dev, "USB layer deinitialized\n");
 
 	/* Free TX/RX buffers last, after all pipes are closed and no further
 	 * DMA activity can reference them.
