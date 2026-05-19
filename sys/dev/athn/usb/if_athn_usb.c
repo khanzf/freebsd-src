@@ -936,6 +936,12 @@ athn_usb_detach(device_t self)
 	ieee80211_ifdetach(ic);
 	athn_detach(sc);
 
+	/* Release the firmware image; no longer needed once hardware is down. */
+	if (usc->usc_firmware != NULL) {
+		firmware_put(usc->usc_firmware, FIRMWARE_UNLOAD);
+		usc->usc_firmware = NULL;
+	}
+
 	/*
 	 * Phase 3b: Stop WMI — wake any threads sleeping in athn_usb_wmi_xcmd
 	 * waiting for a response that will never arrive.
@@ -984,6 +990,7 @@ athn_usb_detach(device_t self)
 	athn_usb_close_pipes(usc);
 	cv_destroy(&usc->cv_cmd);
 	cv_destroy(&usc->cv_msg);
+	ATHN_CMDQ_LOCK_DESTROY(sc);
 	mtx_destroy(&sc->sc_mtx);
 
 	/*
