@@ -916,9 +916,17 @@ athn_usb_detach(device_t self)
 	 * Phase 3b: Stop WMI — wake any threads sleeping in athn_usb_wmi_xcmd
 	 * waiting for a response that will never arrive.
 	 *
-	 * Linux: ath9k_stop_wmi(priv)             --> cv_broadcast(&usc->cv_cmd)
+	 * Linux: ath9k_stop_wmi(priv)             --> ATHN_LOCK(sc)
+	 *   sets wmi->stopped = true under mutex      sc->sc_attached = 0
+	 *   so waiters see it and bail out            cv_broadcast(&usc->cv_cmd)
 	 *                                             cv_broadcast(&usc->cv_msg)
+	 *                                             ATHN_UNLOCK(sc)
 	 */
+	ATHN_LOCK(sc);
+	sc->sc_attached = 0;
+	cv_broadcast(&usc->cv_cmd);
+	cv_broadcast(&usc->cv_msg);
+	ATHN_UNLOCK(sc);
 
 	/*
 	 * Phase 3c: Tear down USB transfers, destroy WMI state, and release
