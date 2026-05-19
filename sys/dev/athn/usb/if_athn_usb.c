@@ -938,6 +938,10 @@ athn_usb_detach(device_t self)
 	 *        ieee80211_free_hw(hw)                 --> mtx_destroy(&sc->sc_mtx)
 	 *        ath9k_htc_hw_free(hif_dev->htc_handle) -- softc freed by USB bus driver
 	 */
+	athn_usb_close_pipes(usc);
+	cv_destroy(&usc->cv_cmd);
+	cv_destroy(&usc->cv_msg);
+	mtx_destroy(&sc->sc_mtx);
 
 	/*
 	 * Phase 4: If this was a clean detach (not a physical unplug), send
