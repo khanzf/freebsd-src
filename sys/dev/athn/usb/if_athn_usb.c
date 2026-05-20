@@ -3166,11 +3166,11 @@ athn_usb_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 		 */
 		device_printf(usc->sc_sc.sc_dev,
 		    "RX interrupt error: %s (wait_id=%s/0x%x)\n",
-		    usbd_errstr(error),
+		    usbd_errstr(usb_error),
 		    athn_usb_wmi_cmd_str(usc->wait_msg_id), usc->wait_msg_id);
 		cv_broadcast(&usc->cv_cmd);
 		cv_broadcast(&usc->cv_msg);
-		if (error == USB_ERR_CANCELLED)
+		if (usb_error == USB_ERR_CANCELLED)
 			break;
 		goto TR_SETUP;
 	}
