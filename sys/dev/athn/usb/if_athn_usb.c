@@ -4054,31 +4054,43 @@ athn_usb_stop(struct athn_softc *sc)
 	struct ar_htc_target_vif hvif;
 	uint8_t sta_index;
 
-	printf("Calling athn_usb_stop\n");
-	if (sc->sc_attached == 0) {
-		printf("Exiting athn_usb_stop because already detached...\n");
+	/* Linux: test_bit(ATH_OP_INVALID) guard */
+	if (sc->sc_attached == 0)
 		return;
-	}
-	/*
-	sc->sc_tx_timer = 0;
-	ifp->if_timer = 0;
-	ifp->if_flags &= ~IFF_RUNNING;
-	ifq_clr_oactive(&ifp->if_snd);
-	*/
 
-//	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
-
-	/* Wait for all async commands to complete. */
-
+	/* Wake the hardware before issuing any WMI commands.
+	 * Linux: ath9k_htc_ps_wakeup(priv) -> ath9k_hw_setpower(ATH9K_PM_AWAKE)
+	 */
 	ATHN_LOCK(sc);
-	printf("Fix this later\n");
+	athn_set_power_awake(sc);
+	ATHN_UNLOCK(sc);
+
+	/* Wait for all async commands to complete.
+	 * Linux: implicit via mutex ordering before WMI commands.
+	 */
+	ATHN_LOCK(sc);
 	athn_usb_wait_async(usc);
 	ATHN_UNLOCK(sc);
 
+	/* Stop scan and calibration timers.
+	 * Linux: ath9k_htc_stop_ani() -> cancel_delayed_work_sync(&ani_work)
+	 *        cancel_work_sync(fatal_work, ps_work, led_work) -- no FreeBSD equivalent
+	 */
 	ATHN_LOCK(sc);
 	callout_stop(&sc->scan_to);
 	callout_stop(&sc->calib_to);
 	ATHN_UNLOCK(sc);
+
+	/* Disable Bluetooth coexistence if active.
+	 * Linux: ath9k_htc_stop_btcoex(priv) -> ath9k_hw_btcoex_disable()
+	 */
+	if (sc->flags & ATHN_FLAG_BTCOEX)
+		athn_btcoex_disable(sc);
+
+	/* Remove monitor interface if present.
+	 * Linux: if (priv->ah->is_monitoring) ath9k_htc_remove_monitor_interface()
+	 * Not yet implemented in this driver.
+	 */
 
 	/* Remove all non-default nodes. */
 	ATHN_LOCK(sc);
@@ -4101,12 +4113,31 @@ athn_usb_stop(struct athn_softc *sc)
 
 	usc->free_node_slots = 0xff;
 
+	/* Send WMI shutdown commands to the firmware.
+	 * Linux: WMI_CMD(WMI_DISABLE_INTR_CMDID)
+	 *        WMI_CMD(WMI_DRAIN_TXQ_ALL_CMDID)
+	 *        WMI_CMD(WMI_STOP_RECV_CMDID)
+	 */
 	ATHN_LOCK(sc);
 	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_DISABLE_INTR);
 	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_DRAIN_TXQ_ALL);
 	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_STOP_RECV);
 	ATHN_UNLOCK(sc);
 
+	/* Drain all USB transfers — bulk and interrupt endpoints.
+	 * Linux: ath9k_htc_tx_drain() drains SW queues and kills tasklets;
+	 *        ath9k_wmi_event_drain() kills the WMI event tasklet and purges
+	 *        the event queue.  FreeBSD drains at the USB transfer level.
+	 */
+	usbd_transfer_drain(usc->usc_xfer[ATHN_TX_DATA]);
+	usbd_transfer_drain(usc->usc_xfer[ATHN_RX_DATA]);
+	usbd_transfer_drain(usc->usc_xfer[ATHN_TX_INTR]);
+	usbd_transfer_drain(usc->usc_xfer[ATHN_RX_INTR]);
+
+	/* Reset and power down the hardware.
+	 * Linux: ath9k_hw_phy_disable() + ath9k_hw_disable()
+	 *        ath9k_htc_ps_restore() + ath9k_htc_setpower(ATH9K_PM_FULL_SLEEP)
+	 */
 	ATHN_LOCK(sc);
 	athn_reset(sc, 0);
 	athn_init_pll(sc, NULL);
@@ -4116,19 +4147,13 @@ athn_usb_stop(struct athn_softc *sc)
 	athn_set_power_sleep(sc);
 	ATHN_UNLOCK(sc);
 
-	/* Abort Tx/Rx. */
-	//ATHN_LOCK(sc);
-	usbd_transfer_drain(usc->usc_xfer[ATHN_TX_DATA]);
-	usbd_transfer_drain(usc->usc_xfer[ATHN_RX_DATA]);
-	//ATHN_UNLOCK(sc);
-
-	/* Flush Rx stream. */
+	/* Flush the Rx stream reassembly buffer. */
 	m_freem(usc->rx_stream.m);
 	usc->rx_stream.m = NULL;
 	usc->rx_stream.left = 0;
 
+	/* Linux: set_bit(ATH_OP_INVALID) */
 	sc->sc_running = 0;
-	printf("Setting sc->sc_running = 0\n");
 }
 
 static device_method_t athn_usb_methods[] = {
