@@ -932,6 +932,12 @@ athn_usb_detach(device_t self)
 	 *                                             athn_usb_free_tx_cmd(usc)   [deferred]
 	 *   ath9k_deinit_priv(priv)               --> athn_detach(sc)  [stub, not yet implemented]
 	 */
+	/* Stop the interface if it is still running before unregistering.
+	 * In Linux, ieee80211_unregister_hw() triggers .stop internally;
+	 * in FreeBSD we must call it explicitly first.
+	 */
+	if (sc->sc_running)
+		athn_usb_stop(sc);
 	athn_set_led(sc, 0);
 	ieee80211_ifdetach(ic);
 	athn_detach(sc);
