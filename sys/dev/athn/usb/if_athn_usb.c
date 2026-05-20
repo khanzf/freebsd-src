@@ -870,8 +870,13 @@ error:
  *
  * Linux: ath9k_hif_usb_reboot() sends 0xffffffff via usb_interrupt_msg()
  * to USB_REG_OUT_PIPE (the interrupt OUT endpoint, AR_PIPE_TX_INTR).
- * usb_interrupt_msg() is synchronous; we approximate that by calling
- * The caller polls usbd_transfer_pending() to wait for completion.
+ * usb_interrupt_msg() is synchronous.  We approximate that by:
+ *   1. Waiting for TX_INTR to be idle (flags_int.transferring == 0).
+ *      usbd_transfer_start() is a documented no-op when the transfer is
+ *      already active, so we must not call it until the previous WMI
+ *      command's TRANSFERRED callback has run.
+ *   2. Setting the reboot payload and starting the transfer.
+ *   3. Waiting for the transfer to complete.
  */
 static void
 athn_usb_reboot(struct athn_usb_softc *usc)
@@ -879,11 +884,27 @@ athn_usb_reboot(struct athn_usb_softc *usc)
 	struct athn_softc *sc = &usc->sc_sc;
 	uint32_t reboot_cmd = 0xffffffff;
 
+	ATHN_LOCK(sc);
+
+	/* Step 1: drain any previous TX_INTR transfer. */
+	while (usbd_transfer_pending(usc->usc_xfer[ATHN_TX_INTR])) {
+		ATHN_UNLOCK(sc);
+		pause("athnrbt", hz / 16);
+		ATHN_LOCK(sc);
+	}
+
+	/* Step 2: load the reboot payload and kick the transfer. */
 	memcpy(usc->tx_cmd.buf, &reboot_cmd, sizeof(reboot_cmd));
 	usc->tx_cmd.buflen = sizeof(reboot_cmd);
-
-	ATHN_LOCK(sc);
 	usbd_transfer_start(usc->usc_xfer[ATHN_TX_INTR]);
+
+	/* Step 3: wait for the reboot packet to be sent. */
+	while (usbd_transfer_pending(usc->usc_xfer[ATHN_TX_INTR])) {
+		ATHN_UNLOCK(sc);
+		pause("athnrbt", hz / 16);
+		ATHN_LOCK(sc);
+	}
+
 	ATHN_UNLOCK(sc);
 }
 
@@ -996,24 +1017,9 @@ athn_usb_detach(device_t self)
 	 *   --> if (!unplugged)
 	 *           athn_usb_reboot(usc);
 	 */
-	if (!unplugged && usc->sc_athn_attached) {
+	/* athn_usb_reboot() handles the full wait-start-wait sequence. */
+	if (!unplugged && usc->sc_athn_attached)
 		athn_usb_reboot(usc);
-		/*
-		 * Linux uses usb_interrupt_msg() which blocks until the transfer
-		 * completes.  FreeBSD's usbd_transfer_start() is asynchronous.
-		 * usbd_transfer_drain() would cancel the in-flight transfer, so
-		 * instead poll usbd_transfer_pending() (same pattern as
-		 * athn_usb_htc_msg) to let the USB stack send the packet before
-		 * athn_usb_close_pipes() tears down the endpoint.
-		 */
-		ATHN_LOCK(sc);
-		while (usbd_transfer_pending(usc->usc_xfer[ATHN_TX_INTR])) {
-			ATHN_UNLOCK(sc);
-			pause("athnrbt", hz / 16);
-			ATHN_LOCK(sc);
-		}
-		ATHN_UNLOCK(sc);
-	}
 
 	/*
 	 * Phase 3c: Tear down USB transfers, destroy WMI state, and release
