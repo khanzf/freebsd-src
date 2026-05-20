@@ -1657,14 +1657,34 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		goto error;
 
 	/*
-	 * Give the firmware time to initialize before we start interrupt IN
-	 * polling.  On a warm reboot the interrupt IN endpoint may still be
-	 * halted from the previous session; if athn_usb_intr_rx_callback sees
-	 * an IOERROR it calls usbd_transfer_clear_stall() which schedules a
-	 * CLEAR_FEATURE before the next retry, so the stale halt is cleared
-	 * dynamically without us having to touch EP0 here.
+	 * Give the firmware time to initialize.  After AR_FW_DOWNLOAD_COMP the
+	 * bootloader jumps to the new firmware image; the firmware must set up
+	 * its USB endpoint handlers before it can handle either data transfers
+	 * or EP0 control requests.
 	 */
 	pause("athnfw", hz);
+
+	/*
+	 * Clear any stale endpoint halt on the interrupt IN endpoint.
+	 * The AR9271 does a CPU-only reboot in response to the 0xffffffff
+	 * reboot command: the USB controller is NOT reset, so halt bits from
+	 * the previous firmware session persist.  Now that the new firmware
+	 * has had 1 s to initialise and owns EP0, send CLEAR_FEATURE so the
+	 * firmware can deliver AR_HTC_MSG_READY on the next IN token.
+	 * On a cold (first) load the endpoint is not halted; CLEAR_FEATURE is
+	 * a no-op in that case.
+	 */
+	{
+		usb_device_request_t clr_req;
+		clr_req.bmRequestType = UT_WRITE_ENDPOINT;
+		clr_req.bRequest = UR_CLEAR_FEATURE;
+		USETW(clr_req.wValue, UF_ENDPOINT_HALT);
+		USETW(clr_req.wLength, 0);
+		USETW(clr_req.wIndex, AR_PIPE_RX_INTR);
+		ATHN_LOCK(sc);
+		(void)usbd_do_request(usc->sc_udev, &sc->sc_mtx, &clr_req, NULL);
+		ATHN_UNLOCK(sc);
+	}
 
 	ATHN_LOCK(sc);
 	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
@@ -3213,15 +3233,12 @@ athn_usb_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 		}
 		/*
 		 * Transient errors (IOERROR, stalled endpoint, device still
-		 * initialising after a reboot, etc.): schedule a
-		 * CLEAR_FEATURE(endpoint_halt) before the next retry so that
-		 * a stale halt bit left by the previous firmware session is
-		 * cleared by the now-running firmware.  Do NOT broadcast
-		 * cv_msg or cv_cmd — doing so wakes threads waiting for a
-		 * real HTC message and causes them to misidentify the error
-		 * as success.
+		 * initialising after a reboot, etc.): restart the pipe so it
+		 * keeps running.  Do NOT broadcast cv_msg or cv_cmd — doing
+		 * so wakes threads in cv_timedwait that are waiting for a
+		 * real HTC message, causing them to proceed with uninitialised
+		 * response data and misidentify the error as success.
 		 */
-		usbd_transfer_clear_stall(xfer);
 		goto TR_SETUP;
 	}
 
