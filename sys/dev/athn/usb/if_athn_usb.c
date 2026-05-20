@@ -1639,6 +1639,34 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	if (error != 0)
 		goto error;
 
+	/*
+	 * Clear any stale endpoint halt on the interrupt IN endpoint before
+	 * starting the firmware.  The AR9271 performs a CPU-only reboot when
+	 * it receives the 0xffffffff reboot command: the USB controller is NOT
+	 * reset, so endpoint halt bits from the previous firmware session
+	 * persist.  If the interrupt IN is halted when the new firmware starts,
+	 * its USB endpoint handler cannot send AR_HTC_MSG_READY and the host
+	 * gets a continuous IOERROR flood instead.
+	 *
+	 * Send CLEAR_FEATURE(endpoint_halt) to the interrupt IN endpoint while
+	 * the bootloader is still running and can accept standard endpoint
+	 * control requests.  This is harmless on a cold boot (endpoint is not
+	 * halted) and essential on a warm reboot (endpoint is halted).
+	 */
+	{
+		usb_device_request_t clr_req;
+		clr_req.bmRequestType = UT_WRITE_ENDPOINT;
+		clr_req.bRequest = UR_CLEAR_FEATURE;
+		USETW(clr_req.wValue, UF_ENDPOINT_HALT);
+		USETW(clr_req.wLength, 0);
+		ATHN_LOCK(sc);
+		USETW(clr_req.wIndex, AR_PIPE_RX_INTR);
+		(void)usbd_do_request(usc->sc_udev, &sc->sc_mtx, &clr_req, NULL);
+		USETW(clr_req.wIndex, AR_PIPE_TX_INTR);
+		(void)usbd_do_request(usc->sc_udev, &sc->sc_mtx, &clr_req, NULL);
+		ATHN_UNLOCK(sc);
+	}
+
 	addr = AR9271_FIRMWARE_TEXT >> 8;
 
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
