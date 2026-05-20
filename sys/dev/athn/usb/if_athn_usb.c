@@ -932,6 +932,14 @@ athn_usb_detach(device_t self)
 	 *                                             athn_usb_free_tx_cmd(usc)   [deferred]
 	 *   ath9k_deinit_priv(priv)               --> athn_detach(sc)  [stub, not yet implemented]
 	 */
+	/* Turn off the LED before stopping the interface, matching the Linux
+	 * ordering where ath9k_deinit_leds() is called before
+	 * ieee80211_unregister_hw() triggers .stop.  The GPIO write goes
+	 * through WMI so the firmware must still be running at this point.
+	 */
+	if (usc->sc_athn_attached)
+		athn_set_led(sc, 0);
+
 	/* Stop the interface if it is still running before unregistering.
 	 * In Linux, ieee80211_unregister_hw() triggers .stop internally;
 	 * in FreeBSD we must call it explicitly first.
@@ -940,7 +948,6 @@ athn_usb_detach(device_t self)
 	 */
 	if (usc->sc_athn_attached && sc->sc_running)
 		athn_usb_stop(sc);
-	athn_set_led(sc, 0);
 	ieee80211_ifdetach(ic);
 	athn_detach(sc);
 
