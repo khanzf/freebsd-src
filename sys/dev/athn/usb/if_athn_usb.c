@@ -1649,12 +1649,11 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		pause("W", hz / 16);
 		ATHN_LOCK(sc);
 	}
-	if (error == 0 && usc->wait_msg_id != 0) {
+	while (error == 0 && usc->wait_msg_id != 0)
 		error = cv_timedwait(&usc->cv_msg, &sc->sc_mtx, 2 * hz);
-		if (error) {
-			ATHN_UNLOCK(sc);
-			goto error;
-		}
+	if (error != 0) {
+		ATHN_UNLOCK(sc);
+		goto error;
 	}
 	usc->wait_msg_id = 0;
 	ATHN_UNLOCK(sc);
@@ -1765,7 +1764,7 @@ athn_usb_htc_setup(struct athn_usb_softc *usc)
 	// XXX Come back to this maybe?
 	ATHN_LOCK(sc);
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONF_PIPE, &cfg, sizeof(cfg));
-	if (error == 0 && usc->wait_msg_id != 0)
+	while (error == 0 && usc->wait_msg_id != 0)
 		error = cv_timedwait(&usc->cv_msg, &sc->sc_mtx, hz);
 	ATHN_UNLOCK(sc);
 	usc->wait_msg_id = 0;
@@ -1802,16 +1801,11 @@ athn_usb_htc_connect_svc(struct athn_usb_softc *usc, uint16_t svc_id,
 	ATHN_LOCK(sc);
 	error = athn_usb_htc_msg(usc, AR_HTC_MSG_CONN_SVC, &msg, sizeof(msg));
 
-	/* Wait at most 1 second for response. */
-	if (error == 0 && usc->wait_msg_id != 0) {
-		/* Wait 1 second at most */
+	while (error == 0 && usc->wait_msg_id != 0)
 		error = cv_timedwait(&usc->cv_msg, &sc->sc_mtx, 10 * hz);
-	}
 	ATHN_UNLOCK(sc);
 	usc->wait_msg_id = 0;
 	if (error != 0) {
-//		printf("%s: error waiting for service %d connection\n",
-//		    usc->usb_dev.dv_xname, svc_id);
 		return (error);
 	}
 	if (rsp.status != AR_HTC_SVC_SUCCESS) {
@@ -3180,22 +3174,29 @@ athn_usb_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 		break;
 	case USB_ST_ERROR:
 	default:
-		/*
-		 * USB_ERR_CANCELLED fires when athn_usb_close_pipes() calls
-		 * usbd_transfer_unsetup() during detach — do not restart.
-		 * For any other error (stalled endpoint, device still
-		 * initialising after a reboot, etc.) restart so the pipe
-		 * keeps running.  Without the restart every subsequent WMI
-		 * command will time out because no response can be received.
-		 */
 		device_printf(usc->sc_sc.sc_dev,
 		    "RX interrupt error: %s (wait_id=%s/0x%x)\n",
 		    usbd_errstr(usb_error),
 		    athn_usb_wmi_cmd_str(usc->wait_msg_id), usc->wait_msg_id);
-		cv_broadcast(&usc->cv_cmd);
-		cv_broadcast(&usc->cv_msg);
-		if (usb_error == USB_ERR_CANCELLED)
+		if (usb_error == USB_ERR_CANCELLED) {
+			/*
+			 * Fires when athn_usb_close_pipes() calls
+			 * usbd_transfer_unsetup() during detach.  Wake any
+			 * threads blocked in cv_timedwait so they can exit,
+			 * and do not restart the transfer.
+			 */
+			cv_broadcast(&usc->cv_cmd);
+			cv_broadcast(&usc->cv_msg);
 			break;
+		}
+		/*
+		 * Transient errors (IOERROR, stalled endpoint, device still
+		 * initialising after a reboot, etc.): restart the pipe so it
+		 * keeps running.  Do NOT broadcast cv_msg or cv_cmd — doing
+		 * so wakes threads in cv_timedwait that are waiting for a
+		 * real HTC message, causing them to proceed with uninitialised
+		 * response data and misidentify the error as success.
+		 */
 		goto TR_SETUP;
 	}
 
