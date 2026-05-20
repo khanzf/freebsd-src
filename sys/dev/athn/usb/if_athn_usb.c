@@ -54,6 +54,7 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
+#include <dev/usb/usb_device.h>
 #include "usbdevs.h"
 
 #include <dev/athn/athnreg.h>
