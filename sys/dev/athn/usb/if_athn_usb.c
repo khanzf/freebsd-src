@@ -1018,8 +1018,26 @@ athn_usb_detach(device_t self)
 	 *           athn_usb_reboot(usc);
 	 */
 	/* athn_usb_reboot() handles the full wait-start-wait sequence. */
-	if (!unplugged && usc->sc_athn_attached)
+	if (!unplugged && usc->sc_athn_attached) {
 		athn_usb_reboot(usc);
+		/*
+		 * The AR9271 takes time after receiving the reboot command
+		 * before it actually pulls the USB disconnect.  Poll until
+		 * the device goes away (USB_STATE_DETACHED) so that kldunload
+		 * does not return — and kldload cannot race — until the device
+		 * has completed its USB reset cycle.  Cap at ~3 s.
+		 *
+		 * Linux does not need this wait because the user-space unload
+		 * sequence is slower and the device always disconnects before
+		 * the next modprobe.
+		 */
+		for (int i = 0; i < 50; i++) {
+			if (usb_get_device_state(usc->sc_udev) ==
+			    USB_STATE_DETACHED)
+				break;
+			pause("athnrbt", hz / 16);
+		}
+	}
 
 	/*
 	 * Phase 3c: Tear down USB transfers, destroy WMI state, and release
