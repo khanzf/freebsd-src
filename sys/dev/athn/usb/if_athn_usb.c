@@ -937,9 +937,13 @@ athn_usb_detach(device_t self)
 	 * ordering where ath9k_deinit_leds() is called before
 	 * ieee80211_unregister_hw() triggers .stop.  The GPIO write goes
 	 * through WMI so the firmware must still be running at this point.
+	 * Lock required: usbd_transfer_start() asserts lock is held.
 	 */
-	if (usc->sc_athn_attached)
+	if (usc->sc_athn_attached) {
+		ATHN_LOCK(sc);
 		athn_set_led(sc, 0);
+		ATHN_UNLOCK(sc);
+	}
 
 	/* Stop the interface if it is still running before unregistering.
 	 * In Linux, ieee80211_unregister_hw() triggers .stop internally;
