@@ -1651,13 +1651,28 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	error = usbd_do_request(usc->sc_udev, &sc->sc_mtx, &req, NULL);
 	device_printf(sc->sc_dev,
 	    "athn_usb_load_firmware: AR_FW_DOWNLOAD_COMP returned %d\n", error);
+	ATHN_UNLOCK(sc);
+
+	if (error != 0)
+		goto error;
+
+	/*
+	 * Wait before starting interrupt IN polling.  On a warm reboot (after
+	 * kldunload), the AR9271's interrupt IN endpoint is left HALTED from
+	 * the previous firmware session: the reboot command resets the CPU
+	 * but not the USB hardware, so the endpoint halt bit persists.
+	 * Polling immediately after AR_FW_DOWNLOAD_COMP hits the stalled
+	 * endpoint and causes an IOERROR flood; pipe_bof restarts the host
+	 * side but never clears the device-side halt.
+	 *
+	 * The firmware clears the halt during its own initialization.  Waiting
+	 * ~1 s gives it time to do so before we start polling, so the first
+	 * interrupt IN token gets AR_HTC_MSG_READY rather than STALL.
+	 */
+	pause("athnfw", hz);
+
+	ATHN_LOCK(sc);
 	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
-	retries = 10;
-	while (usbd_transfer_pending(usc->usc_xfer[ATHN_RX_INTR]) && retries--) {
-		ATHN_UNLOCK(sc);
-		pause("W", hz / 16);
-		ATHN_LOCK(sc);
-	}
 	while (error == 0 && usc->wait_msg_id != 0)
 		error = cv_timedwait(&usc->cv_msg, &sc->sc_mtx, 10 * hz);
 	if (error != 0) {
