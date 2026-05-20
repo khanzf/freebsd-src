@@ -869,8 +869,8 @@ error:
  *
  * Linux: ath9k_hif_usb_reboot() sends 0xffffffff via usb_interrupt_msg()
  * to USB_REG_OUT_PIPE (the interrupt OUT endpoint, AR_PIPE_TX_INTR).
- * We use the existing ATHN_TX_INTR xfer and tx_cmd buffer; the transfer
- * will be drained by athn_usb_close_pipes() in Phase 3c.
+ * usb_interrupt_msg() is synchronous; we approximate that by calling
+ * usbd_transfer_drain() on ATHN_TX_INTR in the caller after this returns.
  */
 static void
 athn_usb_reboot(struct athn_usb_softc *usc)
@@ -989,13 +989,22 @@ athn_usb_detach(device_t self)
 	 *   USB_REG_OUT_PIPE (the TX interrupt endpoint, AR_PIPE_TX_INTR).
 	 *
 	 * Note: placed before Phase 3c so the TX interrupt pipe is still open.
-	 * athn_usb_close_pipes() in Phase 3c will drain the in-flight transfer.
+	 * usbd_transfer_drain() below waits for the transfer to complete before
+	 * athn_usb_close_pipes() tears down the endpoint.
 	 *
 	 *   --> if (!unplugged)
 	 *           athn_usb_reboot(usc);
 	 */
-	if (!unplugged && usc->sc_athn_attached)
+	if (!unplugged && usc->sc_athn_attached) {
 		athn_usb_reboot(usc);
+		/*
+		 * Linux uses usb_interrupt_msg() which blocks until the transfer
+		 * completes.  FreeBSD's usbd_transfer_start() is asynchronous, so
+		 * drain ATHN_TX_INTR here to wait for the reboot command to finish
+		 * before athn_usb_close_pipes() tears down the endpoint.
+		 */
+		usbd_transfer_drain(usc->usc_xfer[ATHN_TX_INTR]);
+	}
 
 	/*
 	 * Phase 3c: Tear down USB transfers, destroy WMI state, and release
