@@ -489,10 +489,11 @@ athn_usb_intr_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 
 	switch(USB_GET_STATE(xfer)) {
 	case USB_ST_TRANSFERRED:
-
-		/* It seems like something else should go here, but not certain */
-		/* Not implementing fallthrough for this */
-//	msg->msg_id = htobe16(msg_id);
+		/* Debug: confirm reboot packet was delivered to the USB layer. */
+		if (data->buflen == sizeof(uint32_t) &&
+		    *(uint32_t *)data->buf == 0xffffffff)
+			device_printf(usc->sc_sc.sc_dev,
+			    "athn_usb_reboot: reboot command delivered\n");
 		break;
 	case USB_ST_SETUP:
 /*
@@ -3155,11 +3156,23 @@ athn_usb_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 		break;
 	case USB_ST_ERROR:
 	default:
-		printf("Rx Interrupt Error... %s 0x%x\n",
+		/*
+		 * USB_ERR_CANCELLED fires when athn_usb_close_pipes() calls
+		 * usbd_transfer_unsetup() during detach — do not restart.
+		 * For any other error (stalled endpoint, device still
+		 * initialising after a reboot, etc.) restart so the pipe
+		 * keeps running.  Without the restart every subsequent WMI
+		 * command will time out because no response can be received.
+		 */
+		device_printf(usc->sc_sc.sc_dev,
+		    "RX interrupt error: %s (wait_id=%s/0x%x)\n",
+		    usbd_errstr(error),
 		    athn_usb_wmi_cmd_str(usc->wait_msg_id), usc->wait_msg_id);
-		wakeup(&usc->wait_msg_id);
-		break;
-	// XXX Based on other drivers, there should be a verification for USB_ERR_CANCELLED
+		cv_broadcast(&usc->cv_cmd);
+		cv_broadcast(&usc->cv_msg);
+		if (error == USB_ERR_CANCELLED)
+			break;
+		goto TR_SETUP;
 	}
 
 	return;
