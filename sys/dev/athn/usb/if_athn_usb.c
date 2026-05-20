@@ -935,8 +935,10 @@ athn_usb_detach(device_t self)
 	/* Stop the interface if it is still running before unregistering.
 	 * In Linux, ieee80211_unregister_hw() triggers .stop internally;
 	 * in FreeBSD we must call it explicitly first.
+	 * Guard with sc_athn_attached: athn_usb_stop sends WMI commands to
+	 * the device and must not be called if firmware was never loaded.
 	 */
-	if (sc->sc_running)
+	if (usc->sc_athn_attached && sc->sc_running)
 		athn_usb_stop(sc);
 	athn_set_led(sc, 0);
 	ieee80211_ifdetach(ic);
@@ -980,7 +982,7 @@ athn_usb_detach(device_t self)
 	 *   --> if (!unplugged)
 	 *           athn_usb_reboot(usc);
 	 */
-	if (!unplugged)
+	if (!unplugged && usc->sc_athn_attached)
 		athn_usb_reboot(usc);
 
 	/*
