@@ -1196,8 +1196,8 @@ athn_usb_attachhook(device_t self)
 
 #ifdef ATHN_BT_COEXISTENCE
 	/* Configure bluetooth coexistence for combo chips. */
-	if (sc->flags & ATHN_FLAG_BTCOEX)
-		athn_btcoex_init(sc);
+//	if (sc->flags & ATHN_FLAG_BTCOEX)
+//		athn_btcoex_init(sc);
 #endif
 	/* Configure LED. */
 	ATHN_LOCK(sc);
@@ -4084,8 +4084,8 @@ athn_usb_stop(struct athn_softc *sc)
 	/* Disable Bluetooth coexistence if active.
 	 * Linux: ath9k_htc_stop_btcoex(priv) -> ath9k_hw_btcoex_disable()
 	 */
-	if (sc->flags & ATHN_FLAG_BTCOEX)
-		athn_btcoex_disable(sc);
+//	if (sc->flags & ATHN_FLAG_BTCOEX)
+//		athn_btcoex_disable(sc);
 
 	/* TODO: Remove monitor interface if present.
 	 * Linux: if (priv->ah->is_monitoring)
