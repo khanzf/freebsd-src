@@ -4127,15 +4127,16 @@ athn_usb_stop(struct athn_softc *sc)
 	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_STOP_RECV);
 	ATHN_UNLOCK(sc);
 
-	/* Drain all USB transfers — bulk and interrupt endpoints.
-	 * Linux: ath9k_htc_tx_drain() drains SW queues and kills tasklets;
-	 *        ath9k_wmi_event_drain() kills the WMI event tasklet and purges
-	 *        the event queue.  FreeBSD drains at the USB transfer level.
+	/* Drain bulk data transfers.
+	 * Linux: ath9k_htc_tx_drain() and ath9k_wmi_event_drain() kill
+	 * software tasklets and purge SW queues only — they do NOT stop
+	 * the USB interrupt endpoints.  Only drain the bulk data pipes here;
+	 * the interrupt pipes (used by WMI) must stay active for the hardware
+	 * reset sequence below.  They are torn down by athn_usb_close_pipes()
+	 * during detach.
 	 */
 	usbd_transfer_drain(usc->usc_xfer[ATHN_TX_DATA]);
 	usbd_transfer_drain(usc->usc_xfer[ATHN_RX_DATA]);
-	usbd_transfer_drain(usc->usc_xfer[ATHN_TX_INTR]);
-	usbd_transfer_drain(usc->usc_xfer[ATHN_RX_INTR]);
 
 	/* Reset and power down the hardware.
 	 * Linux: ath9k_hw_phy_disable() + ath9k_hw_disable()
