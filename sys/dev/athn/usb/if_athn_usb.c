@@ -1021,22 +1021,18 @@ athn_usb_detach(device_t self)
 	if (!unplugged && usc->sc_athn_attached) {
 		athn_usb_reboot(usc);
 		/*
-		 * The AR9271 takes ~2-4 seconds after receiving the reboot
-		 * command to complete its full USB reset cycle: disconnect,
-		 * re-enumerate as bootloader, and be ready for firmware
-		 * upload.  Block kldunload here so that an immediate kldload
-		 * cannot race the device's reboot.
+		 * Do NOT pause here.  A long pause allows the device to
+		 * reconnect as a bootloader while the module is still loaded,
+		 * which causes the USB stack to immediately re-probe and try
+		 * athn_usb_attach on the new bootloader device.  That premature
+		 * firmware-upload attempt corrupts the device state for all
+		 * subsequent loads.
 		 *
-		 * usb_get_device_state() cannot be used to detect the
-		 * disconnect because the USB stack's re-entrancy protection
-		 * prevents it from updating udev->state while we are already
-		 * inside device_detach.  A fixed pause is the reliable choice.
-		 *
-		 * Linux does not need this because the user-space unload path
-		 * (rmmod + modprobe) is slow enough that the device always
-		 * finishes rebooting before the next modprobe is issued.
+		 * Instead, kldunload returns quickly (before the device
+		 * disconnects), and athn_usb_load_firmware retries the upload
+		 * until the device is ready.  This is symmetric with what
+		 * Linux achieves via the slower rmmod/modprobe path.
 		 */
-		pause("athnrbt", hz * 4);
 	}
 
 	/*
@@ -1609,30 +1605,52 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 //		return (ENOENT);
 	}
 
-	ptr = __DECONST(char *, usc->usc_firmware->data);
-	addr = AR9271_FIRMWARE >> 8;
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
 	req.bRequest = AR_FW_DOWNLOAD;
 	USETW(req.wIndex, 0);
-	size = usc->usc_firmware->datasize;
-	ATHN_LOCK(sc);
-	while (size > 0) {
-		mlen = MIN(size, 4096);
 
-		USETW(req.wValue, addr);
-		USETW(req.wLength, mlen);
-		if (usbd_do_request_flags(usc->sc_udev, &sc->sc_mtx,
-			&req, ptr, 0, NULL, 250) != 0) {
-			device_printf(sc->sc_dev,
-			    "athn_usb_load_firmware: firmware chunk failed\n");
-			error = EIO;
-			break;
+	/*
+	 * Retry the firmware upload loop.  After a kldunload, the device
+	 * may still be running its previous firmware (or mid-reboot) when
+	 * kldload runs.  The AR9271 stalls AR_FW_DOWNLOAD vendor requests
+	 * until it has returned to the bootloader, so we retry the entire
+	 * upload from scratch until it succeeds or we give up.
+	 */
+	for (retries = 5; retries > 0; retries--) {
+		ptr = __DECONST(char *, usc->usc_firmware->data);
+		addr = AR9271_FIRMWARE >> 8;
+		size = usc->usc_firmware->datasize;
+		error = 0;
+
+		ATHN_LOCK(sc);
+		while (size > 0) {
+			usb_error_t usberr;
+			mlen = MIN(size, 4096);
+			USETW(req.wValue, addr);
+			USETW(req.wLength, mlen);
+			usberr = usbd_do_request_flags(usc->sc_udev, &sc->sc_mtx,
+			    &req, ptr, 0, NULL, 250);
+			if (usberr != 0) {
+				device_printf(sc->sc_dev,
+				    "firmware chunk failed (%s), %d retries left\n",
+				    usbd_errstr(usberr), retries - 1);
+				error = EIO;
+				break;
+			}
+			addr += mlen >> 8;
+			ptr += mlen;
+			size -= mlen;
 		}
-		addr += mlen >> 8;
-		ptr += mlen;
-		size -= mlen;
+		ATHN_UNLOCK(sc);
+
+		if (error == 0)
+			break;
+
+		/* Device not ready yet — wait 1 second and try again. */
+		pause("athnfw", hz);
 	}
-	ATHN_UNLOCK(sc);
+	if (error != 0)
+		goto error;
 
 	addr = AR9271_FIRMWARE_TEXT >> 8;
 
