@@ -1623,6 +1623,8 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		USETW(req.wLength, mlen);
 		if (usbd_do_request_flags(usc->sc_udev, &sc->sc_mtx,
 			&req, ptr, 0, NULL, 250) != 0) {
+			device_printf(sc->sc_dev,
+			    "athn_usb_load_firmware: firmware chunk failed\n");
 			error = EIO;
 			break;
 		}
@@ -1642,6 +1644,8 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	usc->wait_msg_id = AR_HTC_MSG_READY;
 	ATHN_LOCK(sc);
 	error = usbd_do_request(usc->sc_udev, &sc->sc_mtx, &req, NULL);
+	device_printf(sc->sc_dev,
+	    "athn_usb_load_firmware: AR_FW_DOWNLOAD_COMP returned %d\n", error);
 	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
 	retries = 10;
 	while (usbd_transfer_pending(usc->usc_xfer[ATHN_RX_INTR]) && retries--) {
@@ -1650,11 +1654,14 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		ATHN_LOCK(sc);
 	}
 	while (error == 0 && usc->wait_msg_id != 0)
-		error = cv_timedwait(&usc->cv_msg, &sc->sc_mtx, 2 * hz);
+		error = cv_timedwait(&usc->cv_msg, &sc->sc_mtx, 10 * hz);
 	if (error != 0) {
+		device_printf(sc->sc_dev,
+		    "athn_usb_load_firmware: timed out waiting for AR_HTC_MSG_READY\n");
 		ATHN_UNLOCK(sc);
 		goto error;
 	}
+	device_printf(sc->sc_dev, "athn_usb_load_firmware: AR_HTC_MSG_READY received\n");
 	usc->wait_msg_id = 0;
 	ATHN_UNLOCK(sc);
 
