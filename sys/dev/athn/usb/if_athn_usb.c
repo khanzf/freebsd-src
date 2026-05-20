@@ -1639,34 +1639,6 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	if (error != 0)
 		goto error;
 
-	/*
-	 * Clear any stale endpoint halt on the interrupt IN endpoint before
-	 * starting the firmware.  The AR9271 performs a CPU-only reboot when
-	 * it receives the 0xffffffff reboot command: the USB controller is NOT
-	 * reset, so endpoint halt bits from the previous firmware session
-	 * persist.  If the interrupt IN is halted when the new firmware starts,
-	 * its USB endpoint handler cannot send AR_HTC_MSG_READY and the host
-	 * gets a continuous IOERROR flood instead.
-	 *
-	 * Send CLEAR_FEATURE(endpoint_halt) to the interrupt IN endpoint while
-	 * the bootloader is still running and can accept standard endpoint
-	 * control requests.  This is harmless on a cold boot (endpoint is not
-	 * halted) and essential on a warm reboot (endpoint is halted).
-	 */
-	{
-		usb_device_request_t clr_req;
-		clr_req.bmRequestType = UT_WRITE_ENDPOINT;
-		clr_req.bRequest = UR_CLEAR_FEATURE;
-		USETW(clr_req.wValue, UF_ENDPOINT_HALT);
-		USETW(clr_req.wLength, 0);
-		ATHN_LOCK(sc);
-		USETW(clr_req.wIndex, AR_PIPE_RX_INTR);
-		(void)usbd_do_request(usc->sc_udev, &sc->sc_mtx, &clr_req, NULL);
-		USETW(clr_req.wIndex, AR_PIPE_TX_INTR);
-		(void)usbd_do_request(usc->sc_udev, &sc->sc_mtx, &clr_req, NULL);
-		ATHN_UNLOCK(sc);
-	}
-
 	addr = AR9271_FIRMWARE_TEXT >> 8;
 
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
@@ -1685,17 +1657,12 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		goto error;
 
 	/*
-	 * Wait before starting interrupt IN polling.  On a warm reboot (after
-	 * kldunload), the AR9271's interrupt IN endpoint is left HALTED from
-	 * the previous firmware session: the reboot command resets the CPU
-	 * but not the USB hardware, so the endpoint halt bit persists.
-	 * Polling immediately after AR_FW_DOWNLOAD_COMP hits the stalled
-	 * endpoint and causes an IOERROR flood; pipe_bof restarts the host
-	 * side but never clears the device-side halt.
-	 *
-	 * The firmware clears the halt during its own initialization.  Waiting
-	 * ~1 s gives it time to do so before we start polling, so the first
-	 * interrupt IN token gets AR_HTC_MSG_READY rather than STALL.
+	 * Give the firmware time to initialize before we start interrupt IN
+	 * polling.  On a warm reboot the interrupt IN endpoint may still be
+	 * halted from the previous session; if athn_usb_intr_rx_callback sees
+	 * an IOERROR it calls usbd_transfer_clear_stall() which schedules a
+	 * CLEAR_FEATURE before the next retry, so the stale halt is cleared
+	 * dynamically without us having to touch EP0 here.
 	 */
 	pause("athnfw", hz);
 
@@ -3246,12 +3213,15 @@ athn_usb_intr_rx_callback(struct usb_xfer *xfer, usb_error_t usb_error)
 		}
 		/*
 		 * Transient errors (IOERROR, stalled endpoint, device still
-		 * initialising after a reboot, etc.): restart the pipe so it
-		 * keeps running.  Do NOT broadcast cv_msg or cv_cmd — doing
-		 * so wakes threads in cv_timedwait that are waiting for a
-		 * real HTC message, causing them to proceed with uninitialised
-		 * response data and misidentify the error as success.
+		 * initialising after a reboot, etc.): schedule a
+		 * CLEAR_FEATURE(endpoint_halt) before the next retry so that
+		 * a stale halt bit left by the previous firmware session is
+		 * cleared by the now-running firmware.  Do NOT broadcast
+		 * cv_msg or cv_cmd — doing so wakes threads waiting for a
+		 * real HTC message and causes them to misidentify the error
+		 * as success.
 		 */
+		usbd_transfer_clear_stall(xfer);
 		goto TR_SETUP;
 	}
 
