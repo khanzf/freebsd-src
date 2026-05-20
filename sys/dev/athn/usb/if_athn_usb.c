@@ -4087,9 +4087,11 @@ athn_usb_stop(struct athn_softc *sc)
 	if (sc->flags & ATHN_FLAG_BTCOEX)
 		athn_btcoex_disable(sc);
 
-	/* Remove monitor interface if present.
-	 * Linux: if (priv->ah->is_monitoring) ath9k_htc_remove_monitor_interface()
-	 * Not yet implemented in this driver.
+	/* TODO: Remove monitor interface if present.
+	 * Linux: if (priv->ah->is_monitoring)
+	 *            ath9k_htc_remove_monitor_interface(priv);
+	 * Requires implementing is_monitoring flag and
+	 * athn_usb_remove_monitor_interface() via AR_WMI_CMD_VAP_REMOVE.
 	 */
 
 	/* Remove all non-default nodes. */
