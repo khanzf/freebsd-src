@@ -941,6 +941,28 @@ athn_usb_detach(device_t self)
 		usc->usc_unplugged = true;
 
 	/*
+	 * Phase 2.5: Send the reboot command BEFORE WMI teardown, matching
+	 * Linux's ath9k_hif_usb_disconnect which calls ath9k_hif_usb_reboot()
+	 * first, then mdelay(100), then ath9k_deinit_device().
+	 *
+	 * Critical ordering: the firmware's interrupt OUT handler is still
+	 * running at this point.  After athn_usb_stop() sends
+	 * AR_WMI_CMD_DISABLE_INTR, the firmware halts that handler and will
+	 * never read the 0xffffffff payload from the endpoint buffer, even
+	 * though the USB hardware still ACKs the packet.  So the reboot
+	 * command must be delivered while the firmware is fully active.
+	 *
+	 * A 100 ms pause after the reboot (matching Linux mdelay(100)) is
+	 * safe: the device takes >1 s to disconnect and re-enumerate as the
+	 * bootloader, so this pause cannot trigger the premature re-attach
+	 * race that a 4-second pause would.
+	 */
+	if (!unplugged && usc->sc_athn_attached) {
+		athn_usb_reboot(usc);
+		pause("athnrbt", hz / 10);	/* ~100 ms, matches Linux mdelay(100) */
+	}
+
+	/*
 	 * Phase 3a: Deinit the 802.11 stack and hardware.  TX/RX buffer frees
 	 * are deferred to the end of detach so the buffers remain valid while
 	 * pipes are still being torn down in later phases.
@@ -955,11 +977,9 @@ athn_usb_detach(device_t self)
 	 *                                             athn_usb_free_tx_cmd(usc)   [deferred]
 	 *   ath9k_deinit_priv(priv)               --> athn_detach(sc)  [stub, not yet implemented]
 	 */
-	/* Turn off the LED before stopping the interface, matching the Linux
-	 * ordering where ath9k_deinit_leds() is called before
-	 * ieee80211_unregister_hw() triggers .stop.  The GPIO write goes
-	 * through WMI so the firmware must still be running at this point.
-	 * Lock required: usbd_transfer_start() asserts lock is held.
+	/* Turn off the LED before stopping the interface.  The GPIO write goes
+	 * through WMI; if the firmware is already rebooting the command will
+	 * fail silently, which is harmless.
 	 */
 	if (usc->sc_athn_attached) {
 		ATHN_LOCK(sc);
@@ -972,6 +992,8 @@ athn_usb_detach(device_t self)
 	 * in FreeBSD we must call it explicitly first.
 	 * Guard with sc_athn_attached: athn_usb_stop sends WMI commands to
 	 * the device and must not be called if firmware was never loaded.
+	 * If the firmware is rebooting, WMI commands inside athn_usb_stop
+	 * will fail silently (all use (void) return), which is harmless.
 	 */
 	if (usc->sc_athn_attached && sc->sc_running)
 		athn_usb_stop(sc);
@@ -999,41 +1021,6 @@ athn_usb_detach(device_t self)
 	cv_broadcast(&usc->cv_cmd);
 	cv_broadcast(&usc->cv_msg);
 	ATHN_UNLOCK(sc);
-
-	/*
-	 * Phase 4: If this was a clean detach (not a physical unplug), send
-	 * a reboot command to return the device to its first-stage bootloader,
-	 * making it re-enumerable without a power cycle.
-	 *
-	 * Linux: if (!unplugged && (hif_dev->flags & HIF_USB_READY))
-	 *            ath9k_hif_usb_reboot(udev);
-	 *   which sends 0xffffffff as a 4-byte interrupt OUT message to
-	 *   USB_REG_OUT_PIPE (the TX interrupt endpoint, AR_PIPE_TX_INTR).
-	 *
-	 * Note: placed before Phase 3c so the TX interrupt pipe is still open.
-	 * usbd_transfer_drain() below waits for the transfer to complete before
-	 * athn_usb_close_pipes() tears down the endpoint.
-	 *
-	 *   --> if (!unplugged)
-	 *           athn_usb_reboot(usc);
-	 */
-	/* athn_usb_reboot() handles the full wait-start-wait sequence. */
-	if (!unplugged && usc->sc_athn_attached) {
-		athn_usb_reboot(usc);
-		/*
-		 * Do NOT pause here.  A long pause allows the device to
-		 * reconnect as a bootloader while the module is still loaded,
-		 * which causes the USB stack to immediately re-probe and try
-		 * athn_usb_attach on the new bootloader device.  That premature
-		 * firmware-upload attempt corrupts the device state for all
-		 * subsequent loads.
-		 *
-		 * Instead, kldunload returns quickly (before the device
-		 * disconnects), and athn_usb_load_firmware retries the upload
-		 * until the device is ready.  This is symmetric with what
-		 * Linux achieves via the slower rmmod/modprobe path.
-		 */
-	}
 
 	/*
 	 * Phase 3c: Tear down USB transfers, destroy WMI state, and release
