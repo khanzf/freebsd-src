@@ -870,7 +870,7 @@ error:
  * Linux: ath9k_hif_usb_reboot() sends 0xffffffff via usb_interrupt_msg()
  * to USB_REG_OUT_PIPE (the interrupt OUT endpoint, AR_PIPE_TX_INTR).
  * usb_interrupt_msg() is synchronous; we approximate that by calling
- * usbd_transfer_drain() on ATHN_TX_INTR in the caller after this returns.
+ * The caller polls usbd_transfer_pending() to wait for completion.
  */
 static void
 athn_usb_reboot(struct athn_usb_softc *usc)
@@ -999,11 +999,19 @@ athn_usb_detach(device_t self)
 		athn_usb_reboot(usc);
 		/*
 		 * Linux uses usb_interrupt_msg() which blocks until the transfer
-		 * completes.  FreeBSD's usbd_transfer_start() is asynchronous, so
-		 * drain ATHN_TX_INTR here to wait for the reboot command to finish
-		 * before athn_usb_close_pipes() tears down the endpoint.
+		 * completes.  FreeBSD's usbd_transfer_start() is asynchronous.
+		 * usbd_transfer_drain() would cancel the in-flight transfer, so
+		 * instead poll usbd_transfer_pending() (same pattern as
+		 * athn_usb_htc_msg) to let the USB stack send the packet before
+		 * athn_usb_close_pipes() tears down the endpoint.
 		 */
-		usbd_transfer_drain(usc->usc_xfer[ATHN_TX_INTR]);
+		ATHN_LOCK(sc);
+		while (usbd_transfer_pending(usc->usc_xfer[ATHN_TX_INTR])) {
+			ATHN_UNLOCK(sc);
+			pause("athnrbt", hz / 16);
+			ATHN_LOCK(sc);
+		}
+		ATHN_UNLOCK(sc);
 	}
 
 	/*
