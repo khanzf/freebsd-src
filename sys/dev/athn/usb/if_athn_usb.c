@@ -982,7 +982,9 @@ athn_usb_detach(device_t self)
 		 * those CVs harmlessly.  athn_usb_close_pipes → unsetup will
 		 * see the transfer already stopped and clean up normally.
 		 */
+		ATHN_LOCK(sc);
 		usbd_transfer_stop(usc->usc_xfer[ATHN_RX_INTR]);
+		ATHN_UNLOCK(sc);
 
 		/*
 		 * Give the bootloader 100 ms to initialize without being
