@@ -1592,6 +1592,34 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 //		return (ENOENT);
 	}
 
+	/*
+	 * Reset device-side endpoint state (halt bits, data toggles) by
+	 * sending SET_CONFIGURATION(1) while the device is in bootloader
+	 * mode.  The AR9271's CPU-only reboot preserves USB hardware state,
+	 * so halt/toggle from the previous firmware session would otherwise
+	 * prevent AR_HTC_MSG_READY from being delivered on the second load.
+	 *
+	 * SET_CONFIGURATION on the same value is required to reset endpoint
+	 * state per USB 2.0 §9.4.7.  The bootloader handles EP0 and will
+	 * process this correctly.  Also reset the host-side data toggle so
+	 * both sides start at DATA0.
+	 */
+	{
+		usb_error_t set_err;
+		struct usb_endpoint *ep;
+
+		ep = usbd_get_ep_by_addr(usc->sc_udev, AR_PIPE_RX_INTR);
+		if (ep != NULL)
+			usbd_clear_data_toggle(usc->sc_udev, ep);
+
+		ATHN_LOCK(sc);
+		set_err = usbd_req_set_config(usc->sc_udev, &sc->sc_mtx, 1);
+		ATHN_UNLOCK(sc);
+		device_printf(sc->sc_dev,
+		    "athn_usb_load_firmware: SET_CONFIGURATION(1) returned %d\n",
+		    set_err);
+	}
+
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
 	req.bRequest = AR_FW_DOWNLOAD;
 	USETW(req.wIndex, 0);
@@ -1663,43 +1691,6 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	 * or EP0 control requests.
 	 */
 	pause("athnfw", hz);
-
-	/*
-	 * Clear any stale endpoint halt on the interrupt IN endpoint.
-	 * The AR9271 does a CPU-only reboot in response to the 0xffffffff
-	 * reboot command: the USB controller is NOT reset, so halt bits from
-	 * the previous firmware session persist.  Now that the new firmware
-	 * has had 1 s to initialise and owns EP0, send CLEAR_FEATURE so the
-	 * firmware can deliver AR_HTC_MSG_READY on the next IN token.
-	 * On a cold (first) load the endpoint is not halted; CLEAR_FEATURE is
-	 * a no-op in that case.
-	 *
-	 * Also reset the HOST-side data toggle for the endpoint so that the
-	 * host and device are in sync (both DATA0) before we start polling.
-	 */
-	{
-		usb_error_t clr_err;
-		usb_device_request_t clr_req;
-		struct usb_endpoint *ep;
-
-		/* Reset host-side data toggle (toggle_next = 0 = DATA0). */
-		ep = usbd_get_ep_by_addr(usc->sc_udev, AR_PIPE_RX_INTR);
-		if (ep != NULL)
-			usbd_clear_data_toggle(usc->sc_udev, ep);
-
-		/* Send CLEAR_FEATURE(endpoint_halt) to reset device-side halt+toggle. */
-		clr_req.bmRequestType = UT_WRITE_ENDPOINT;
-		clr_req.bRequest = UR_CLEAR_FEATURE;
-		USETW(clr_req.wValue, UF_ENDPOINT_HALT);
-		USETW(clr_req.wLength, 0);
-		USETW(clr_req.wIndex, AR_PIPE_RX_INTR);
-		ATHN_LOCK(sc);
-		clr_err = usbd_do_request(usc->sc_udev, &sc->sc_mtx, &clr_req, NULL);
-		ATHN_UNLOCK(sc);
-		device_printf(sc->sc_dev,
-		    "athn_usb_load_firmware: CLEAR_FEATURE(RX_INTR) returned %d\n",
-		    clr_err);
-	}
 
 	ATHN_LOCK(sc);
 	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
