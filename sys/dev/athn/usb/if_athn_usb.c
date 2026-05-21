@@ -1593,41 +1593,43 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	}
 
 	/*
-	 * Reset device-side endpoint state (halt bits, data toggles) by
-	 * sending SET_CONFIGURATION(1) while the device is in bootloader
-	 * mode.  The AR9271's CPU-only reboot preserves USB hardware state,
-	 * so halt/toggle from the previous firmware session would otherwise
-	 * prevent AR_HTC_MSG_READY from being delivered on the second load.
+	 * Clear any stale endpoint halt/toggle on the interrupt IN endpoint
+	 * before uploading firmware.  The AR9271 CPU-only reboot preserves
+	 * USB hardware state, so a halt bit or wrong data toggle from the
+	 * previous session would prevent AR_HTC_MSG_READY from being
+	 * delivered.
 	 *
-	 * SET_CONFIGURATION on the same value is required to reset endpoint
-	 * state per USB 2.0 §9.4.7.  The bootloader handles EP0 and will
-	 * process this correctly.  Also reset the host-side data toggle so
-	 * both sides start at DATA0.
+	 * Send CLEAR_FEATURE(endpoint_halt) to the bootloader now, while it
+	 * is still in its initial state (before any firmware is uploaded).
+	 * The bootloader processes EP0 requests; if it does not support
+	 * CLEAR_FEATURE for this endpoint it will stall EP0, but per
+	 * USB 2.0 §8.5.3 the device must accept the next SETUP token even
+	 * when EP0 is stalled, so the firmware upload will proceed normally.
+	 *
+	 * Also reset the host-side data toggle to DATA0 so both sides
+	 * are synchronised before we start polling for AR_HTC_MSG_READY.
 	 */
 	{
-		usb_error_t set_err;
+		usb_error_t clr_err;
+		usb_device_request_t clr_req;
 		struct usb_endpoint *ep;
 
 		ep = usbd_get_ep_by_addr(usc->sc_udev, AR_PIPE_RX_INTR);
 		if (ep != NULL)
 			usbd_clear_data_toggle(usc->sc_udev, ep);
 
-		{
-			usb_device_request_t set_cfg;
-			set_cfg.bmRequestType = UT_WRITE_DEVICE;
-			set_cfg.bRequest = UR_SET_CONFIG;
-			set_cfg.wValue[0] = 1;
-			set_cfg.wValue[1] = 0;
-			USETW(set_cfg.wIndex, 0);
-			USETW(set_cfg.wLength, 0);
-			ATHN_LOCK(sc);
-			set_err = usbd_do_request(usc->sc_udev, &sc->sc_mtx,
-			    &set_cfg, NULL);
-			ATHN_UNLOCK(sc);
-		}
+		clr_req.bmRequestType = UT_WRITE_ENDPOINT;
+		clr_req.bRequest = UR_CLEAR_FEATURE;
+		USETW(clr_req.wValue, UF_ENDPOINT_HALT);
+		USETW(clr_req.wLength, 0);
+		USETW(clr_req.wIndex, AR_PIPE_RX_INTR);
+		ATHN_LOCK(sc);
+		clr_err = usbd_do_request(usc->sc_udev, &sc->sc_mtx,
+		    &clr_req, NULL);
+		ATHN_UNLOCK(sc);
 		device_printf(sc->sc_dev,
-		    "athn_usb_load_firmware: SET_CONFIGURATION(1) returned %d\n",
-		    set_err);
+		    "athn_usb_load_firmware: CLEAR_FEATURE(RX_INTR) returned %d\n",
+		    clr_err);
 	}
 
 	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
