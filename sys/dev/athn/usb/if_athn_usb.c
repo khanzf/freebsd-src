@@ -55,6 +55,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usb_device.h>
+#include <dev/usb/usb_request.h>
 #include "usbdevs.h"
 
 #include <dev/athn/athnreg.h>
@@ -1033,6 +1034,33 @@ athn_usb_detach(device_t self)
 	 *        ath9k_htc_hw_free(hif_dev->htc_handle) -- softc freed by USB bus driver
 	 */
 	athn_usb_close_pipes(usc);
+
+	/*
+	 * Reset the USB port to leave the device in a clean state for the
+	 * next kldload.  The AR9271's CPU-only reboot preserves the USB
+	 * hardware's endpoint state (halt bits, data toggles, FIFOs).  That
+	 * stale state causes firmware reload to fail: CLEAR_FEATURE and
+	 * SET_CONFIGURATION sent to the bootloader corrupt its state when
+	 * the endpoints have leftover data, and the firmware's EP0 returns
+	 * IOERROR for control requests after startup.
+	 *
+	 * A port reset forces a proper USB disconnect/reconnect, resetting
+	 * all device-side endpoint state exactly as Linux's usb_reset_device()
+	 * does in ath9k_hif_usb_reboot().  After the reset the device will
+	 * re-enumerate cleanly; because our module is in the process of being
+	 * unloaded it will be bound to ugen, and the next kldload sees a
+	 * device with pristine endpoint state.
+	 */
+	if (!unplugged && usc->sc_udev->parent_hub != NULL) {
+		usb_error_t rerr;
+		rerr = usbd_req_reset_port(usc->sc_udev->parent_hub, NULL,
+		    usc->sc_udev->port_no);
+		if (rerr != 0)
+			device_printf(sc->sc_dev,
+			    "USB port reset failed (%s), next reload may fail\n",
+			    usbd_errstr(rerr));
+	}
+
 	cv_destroy(&usc->cv_cmd);
 	cv_destroy(&usc->cv_msg);
 	ATHN_CMDQ_LOCK_DESTROY(sc);
