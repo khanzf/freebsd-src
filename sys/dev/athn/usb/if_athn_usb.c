@@ -959,35 +959,53 @@ athn_usb_detach(device_t self)
 	 * race that a 4-second pause would.
 	 */
 	if (!unplugged && usc->sc_athn_attached) {
-		athn_usb_reboot(usc);
-		pause("athnrbt", hz / 10);	/* ~100 ms, matches Linux mdelay(100) */
-	}
-
-	/*
-	 * Reset EP3 IN (AR_PIPE_RX_INTR, 0x83) data toggle to DATA0 while
-	 * the bootloader is running (after the CPU-only reboot above).
-	 *
-	 * The AR9271 CPU-only reboot (0xffffffff command) does NOT reset the
-	 * USB hardware, so EP3's data toggle from the previous firmware
-	 * session (typically DATA1 after the last AR_HTC_MSG_READY) persists
-	 * on the device side.  When kldload runs next, the XHCI host resets
-	 * its own toggle to DATA0 (via xhci_configure_reset_endpoint), so the
-	 * two sides are out of sync → XHCI Transaction Error → IOERROR flood.
-	 *
-	 * CLEAR_FEATURE(ENDPOINT_HALT) on EP3 resets the device-side toggle
-	 * to DATA0 so both sides start in sync on the next load.  We send it
-	 * here (during detach) rather than at the start of the next load
-	 * because the request briefly disrupts the bootloader's state when
-	 * the toggle actually changes (DATA1→DATA0).  Sending it during
-	 * detach gives the bootloader seconds to recover before kldload runs.
-	 *
-	 * The host-side toggle is also reset here via usbd_clear_data_toggle,
-	 * though that is redundant since the next load's first transfer will
-	 * trigger xhci_configure_reset_endpoint anyway.
-	 */
-	if (!unplugged && usc->sc_athn_attached) {
+		usb_error_t clr_err;
 		usb_device_request_t clr_req;
 		struct usb_endpoint *ep;
+
+		athn_usb_reboot(usc);
+
+		/*
+		 * Stop the RX interrupt transfer immediately after the reboot
+		 * response has been received.  The AR9271 does a CPU-only
+		 * reboot (USB hardware is NOT reset), so after 0xffffffff the
+		 * device silently becomes the bootloader without re-enumerating.
+		 * Without this stop, the host continues polling EP3 IN at 1 ms
+		 * intervals producing a flood of USB_ERR_IOERROR callbacks.
+		 * That flood hammers the bootloader's USB controller and
+		 * corrupts its EP0 state before we can send CLEAR_FEATURE,
+		 * causing all subsequent AR_FW_DOWNLOAD chunks to fail.
+		 *
+		 * usbd_transfer_stop is safe here: athn_usb_reboot already
+		 * received its response, so nothing is waiting on cv_cmd or
+		 * cv_msg.  The CANCELLED callback that fires will broadcast
+		 * those CVs harmlessly.  athn_usb_close_pipes → unsetup will
+		 * see the transfer already stopped and clean up normally.
+		 */
+		usbd_transfer_stop(usc->usc_xfer[ATHN_RX_INTR]);
+
+		/*
+		 * Give the bootloader 100 ms to initialize without being
+		 * hammered.  Then send CLEAR_FEATURE(ENDPOINT_HALT) to EP3 IN
+		 * to reset the device-side data toggle to DATA0.
+		 *
+		 * The AR9271 CPU-only reboot preserves the USB endpoint toggle
+		 * state from the previous firmware session (typically DATA1
+		 * after the last AR_HTC_MSG_READY).  On the next kldload, XHCI
+		 * resets its host-side toggle to DATA0 via
+		 * xhci_configure_reset_endpoint, so the two sides are out of
+		 * sync → XHCI Transaction Error → IOERROR flood → timeout
+		 * waiting for AR_HTC_MSG_READY.
+		 *
+		 * We send CLEAR_FEATURE here (during detach, to the bootloader)
+		 * rather than at the start of the next load because the request
+		 * can briefly disrupt EP0 when the toggle actually changes
+		 * (DATA1→DATA0).  Sending it during detach gives the bootloader
+		 * time to recover before kldload runs.  Stopping the IOERROR
+		 * flood first (above) lets the bootloader initialize cleanly so
+		 * the CLEAR_FEATURE EP0 transfer can complete correctly.
+		 */
+		pause("athnrbt", hz / 10);	/* 100 ms for bootloader init */
 
 		ep = usbd_get_ep_by_addr(usc->sc_udev, AR_PIPE_RX_INTR);
 		if (ep != NULL)
@@ -999,9 +1017,12 @@ athn_usb_detach(device_t self)
 		USETW(clr_req.wIndex, AR_PIPE_RX_INTR);
 		USETW(clr_req.wLength, 0);
 		ATHN_LOCK(sc);
-		(void) usbd_do_request_flags(usc->sc_udev, &sc->sc_mtx,
+		clr_err = usbd_do_request_flags(usc->sc_udev, &sc->sc_mtx,
 		    &clr_req, NULL, 0, NULL, 500);
 		ATHN_UNLOCK(sc);
+		device_printf(sc->sc_dev,
+		    "athn_usb_detach: CLEAR_FEATURE(RX_INTR) returned %d\n",
+		    clr_err);
 	}
 
 	/*
