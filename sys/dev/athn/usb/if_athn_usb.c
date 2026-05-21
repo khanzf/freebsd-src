@@ -1612,9 +1612,19 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 		if (ep != NULL)
 			usbd_clear_data_toggle(usc->sc_udev, ep);
 
-		ATHN_LOCK(sc);
-		set_err = usbd_req_set_config(usc->sc_udev, &sc->sc_mtx, 1);
-		ATHN_UNLOCK(sc);
+		{
+			usb_device_request_t set_cfg;
+			set_cfg.bmRequestType = UT_WRITE_DEVICE;
+			set_cfg.bRequest = UR_SET_CONFIG;
+			set_cfg.wValue[0] = 1;
+			set_cfg.wValue[1] = 0;
+			USETW(set_cfg.wIndex, 0);
+			USETW(set_cfg.wLength, 0);
+			ATHN_LOCK(sc);
+			set_err = usbd_do_request(usc->sc_udev, &sc->sc_mtx,
+			    &set_cfg, NULL);
+			ATHN_UNLOCK(sc);
+		}
 		device_printf(sc->sc_dev,
 		    "athn_usb_load_firmware: SET_CONFIGURATION(1) returned %d\n",
 		    set_err);
