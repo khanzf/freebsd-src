@@ -916,6 +916,7 @@ athn_usb_detach(device_t self)
 	struct athn_softc     *sc  = &usc->sc_sc;
 	struct ieee80211com   *ic  = &sc->sc_ic;
 	bool                   unplugged;
+	bool                   rebooted = false;
 
 	/*
 	 * Phase 1: Detect whether the device was physically unplugged or
@@ -1025,6 +1026,16 @@ athn_usb_detach(device_t self)
 		device_printf(sc->sc_dev,
 		    "athn_usb_detach: CLEAR_FEATURE(RX_INTR) returned %d\n",
 		    clr_err);
+		/*
+		 * Device is now in bootloader mode.  Any WMI commands sent
+		 * via EP4 OUT will be received by the bootloader, which does
+		 * not understand the HTC/WMI protocol.  Experiments show that
+		 * unexpected EP4 data corrupts the bootloader's USB EP0 state,
+		 * causing AR_FW_DOWNLOAD control requests to fail with
+		 * USB_ERR_IOERROR on the next kldload.  Mark rebooted=true so
+		 * that athn_set_led and athn_usb_stop are skipped below.
+		 */
+		rebooted = true;
 	}
 
 	/*
@@ -1042,25 +1053,21 @@ athn_usb_detach(device_t self)
 	 *                                             athn_usb_free_tx_cmd(usc)   [deferred]
 	 *   ath9k_deinit_priv(priv)               --> athn_detach(sc)  [stub, not yet implemented]
 	 */
-	/* Turn off the LED before stopping the interface.  The GPIO write goes
-	 * through WMI; if the firmware is already rebooting the command will
-	 * fail silently, which is harmless.
+	/*
+	 * Turn off the LED and stop the running interface via WMI.
+	 * Skip both if the device was CPU-rebooted to bootloader mode:
+	 * the bootloader does not run the firmware's WMI stack, so these
+	 * commands go to EP4 OUT as raw bytes the bootloader does not
+	 * understand.  Receiving unexpected EP4 data corrupts the
+	 * bootloader's EP0 state and breaks AR_FW_DOWNLOAD on next load.
 	 */
-	if (usc->sc_athn_attached) {
+	if (usc->sc_athn_attached && !rebooted) {
 		ATHN_LOCK(sc);
 		athn_set_led(sc, 0);
 		ATHN_UNLOCK(sc);
 	}
 
-	/* Stop the interface if it is still running before unregistering.
-	 * In Linux, ieee80211_unregister_hw() triggers .stop internally;
-	 * in FreeBSD we must call it explicitly first.
-	 * Guard with sc_athn_attached: athn_usb_stop sends WMI commands to
-	 * the device and must not be called if firmware was never loaded.
-	 * If the firmware is rebooting, WMI commands inside athn_usb_stop
-	 * will fail silently (all use (void) return), which is harmless.
-	 */
-	if (usc->sc_athn_attached && sc->sc_running)
+	if (usc->sc_athn_attached && sc->sc_running && !rebooted)
 		athn_usb_stop(sc);
 	ieee80211_ifdetach(ic);
 	athn_detach(sc);
