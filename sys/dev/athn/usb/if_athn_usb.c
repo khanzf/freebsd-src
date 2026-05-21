@@ -964,6 +964,47 @@ athn_usb_detach(device_t self)
 	}
 
 	/*
+	 * Reset EP3 IN (AR_PIPE_RX_INTR, 0x83) data toggle to DATA0 while
+	 * the bootloader is running (after the CPU-only reboot above).
+	 *
+	 * The AR9271 CPU-only reboot (0xffffffff command) does NOT reset the
+	 * USB hardware, so EP3's data toggle from the previous firmware
+	 * session (typically DATA1 after the last AR_HTC_MSG_READY) persists
+	 * on the device side.  When kldload runs next, the XHCI host resets
+	 * its own toggle to DATA0 (via xhci_configure_reset_endpoint), so the
+	 * two sides are out of sync → XHCI Transaction Error → IOERROR flood.
+	 *
+	 * CLEAR_FEATURE(ENDPOINT_HALT) on EP3 resets the device-side toggle
+	 * to DATA0 so both sides start in sync on the next load.  We send it
+	 * here (during detach) rather than at the start of the next load
+	 * because the request briefly disrupts the bootloader's state when
+	 * the toggle actually changes (DATA1→DATA0).  Sending it during
+	 * detach gives the bootloader seconds to recover before kldload runs.
+	 *
+	 * The host-side toggle is also reset here via usbd_clear_data_toggle,
+	 * though that is redundant since the next load's first transfer will
+	 * trigger xhci_configure_reset_endpoint anyway.
+	 */
+	if (!unplugged && usc->sc_athn_attached) {
+		usb_device_request_t clr_req;
+		struct usb_endpoint *ep;
+
+		ep = usbd_get_ep_by_addr(usc->sc_udev, AR_PIPE_RX_INTR);
+		if (ep != NULL)
+			usbd_clear_data_toggle(usc->sc_udev, ep);
+
+		clr_req.bmRequestType = UT_WRITE_ENDPOINT;
+		clr_req.bRequest = UR_CLEAR_FEATURE;
+		USETW(clr_req.wValue, UF_ENDPOINT_HALT);
+		USETW(clr_req.wIndex, AR_PIPE_RX_INTR);
+		USETW(clr_req.wLength, 0);
+		ATHN_LOCK(sc);
+		(void) usbd_do_request_flags(usc->sc_udev, &sc->sc_mtx,
+		    &clr_req, NULL, 0, NULL, 500);
+		ATHN_UNLOCK(sc);
+	}
+
+	/*
 	 * Phase 3a: Deinit the 802.11 stack and hardware.  TX/RX buffer frees
 	 * are deferred to the end of detach so the buffers remain valid while
 	 * pipes are still being torn down in later phases.
@@ -1667,42 +1708,17 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	pause("athnfw", hz);
 
 	/*
-	 * After a CPU-only reboot (kldunload → kldload), the AR9271's USB
-	 * hardware preserves the EP3 IN data toggle from the previous
-	 * firmware session.  The XHCI host side is reset to DATA0 when the
-	 * transfer ring is reconfigured, so there is a persistent toggle
-	 * mismatch: device sends DATA1, host expects DATA0 → IOERROR flood.
-	 *
-	 * Send CLEAR_FEATURE(endpoint_halt) to the running firmware to
-	 * reset the device-side data toggle to DATA0.  The firmware's EP0
-	 * handler returns IOERROR (its STATUS phase is bad), but the
-	 * underlying USB hardware may still perform the toggle reset.
-	 * Ignore the return value and proceed regardless.
-	 *
-	 * Also reset the host-side toggle via usbd_clear_data_toggle so
-	 * both sides start at DATA0 when we begin polling for AR_HTC_MSG_READY.
+	 * Reset the host-side data toggle to DATA0 before we start polling
+	 * for AR_HTC_MSG_READY.  The device-side toggle was reset to DATA0
+	 * by CLEAR_FEATURE sent during the previous athn_usb_detach (see
+	 * the comment there), so both sides should be in sync.
 	 */
 	{
-		usb_error_t clr_err;
-		usb_device_request_t clr_req;
 		struct usb_endpoint *ep;
 
 		ep = usbd_get_ep_by_addr(usc->sc_udev, AR_PIPE_RX_INTR);
 		if (ep != NULL)
 			usbd_clear_data_toggle(usc->sc_udev, ep);
-
-		clr_req.bmRequestType = UT_WRITE_ENDPOINT;
-		clr_req.bRequest = UR_CLEAR_FEATURE;
-		USETW(clr_req.wValue, UF_ENDPOINT_HALT);
-		USETW(clr_req.wLength, 0);
-		USETW(clr_req.wIndex, AR_PIPE_RX_INTR);
-		ATHN_LOCK(sc);
-		clr_err = usbd_do_request_flags(usc->sc_udev, &sc->sc_mtx,
-		    &clr_req, NULL, 0, NULL, 500);
-		ATHN_UNLOCK(sc);
-		device_printf(sc->sc_dev,
-		    "athn_usb_load_firmware: CLEAR_FEATURE(RX_INTR) after firmware returned %d\n",
-		    clr_err);
 	}
 
 	ATHN_LOCK(sc);
