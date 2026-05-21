@@ -1673,17 +1673,32 @@ athn_usb_load_firmware(struct athn_usb_softc *usc)
 	 * firmware can deliver AR_HTC_MSG_READY on the next IN token.
 	 * On a cold (first) load the endpoint is not halted; CLEAR_FEATURE is
 	 * a no-op in that case.
+	 *
+	 * Also reset the HOST-side data toggle for the endpoint so that the
+	 * host and device are in sync (both DATA0) before we start polling.
 	 */
 	{
+		usb_error_t clr_err;
 		usb_device_request_t clr_req;
+		struct usb_endpoint *ep;
+
+		/* Reset host-side data toggle (toggle_next = 0 = DATA0). */
+		ep = usbd_get_ep_by_addr(usc->sc_udev, AR_PIPE_RX_INTR);
+		if (ep != NULL)
+			usbd_clear_data_toggle(usc->sc_udev, ep);
+
+		/* Send CLEAR_FEATURE(endpoint_halt) to reset device-side halt+toggle. */
 		clr_req.bmRequestType = UT_WRITE_ENDPOINT;
 		clr_req.bRequest = UR_CLEAR_FEATURE;
 		USETW(clr_req.wValue, UF_ENDPOINT_HALT);
 		USETW(clr_req.wLength, 0);
 		USETW(clr_req.wIndex, AR_PIPE_RX_INTR);
 		ATHN_LOCK(sc);
-		(void)usbd_do_request(usc->sc_udev, &sc->sc_mtx, &clr_req, NULL);
+		clr_err = usbd_do_request(usc->sc_udev, &sc->sc_mtx, &clr_req, NULL);
 		ATHN_UNLOCK(sc);
+		device_printf(sc->sc_dev,
+		    "athn_usb_load_firmware: CLEAR_FEATURE(RX_INTR) returned %d\n",
+		    clr_err);
 	}
 
 	ATHN_LOCK(sc);
