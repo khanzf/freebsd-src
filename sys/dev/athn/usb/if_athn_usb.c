@@ -62,6 +62,13 @@ __FBSDID("$FreeBSD$");
 #define ECDA_NUM_AC 4
 #include <dev/athn/usb/if_athn_usb.h>
 
+
+// Debug for printing the stack
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/stack.h>
+//////////////////////
+
 MALLOC_DEFINE(M_ATHN_USB, "athn_usb", "athn usb private state");
 
 #if 0
@@ -235,6 +242,15 @@ void		athn_usb_tx_freebuf(struct athn_usb_softc *, struct athn_usb_tx_data *);
 struct		athn_usb_tx_data *athn_usb_tx_getbuf(struct athn_usb_softc *);
 
 int wassent = 0;
+
+static void
+print_kernel_stack(void)
+{
+    struct stack st;
+
+    stack_save(&st);           /* Capture current stack */
+    stack_print(&st);          /* Print it (symbolic where possible) */
+}
 
 static void print_hex(const void *buffer, size_t length) {
     const uint8_t *buf = (const uint8_t *)buffer;
@@ -1801,6 +1817,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 	int error;
 
 	if (!sc->sc_attached) {
+		printf("Exiting early 1\n");
 		return (ENXIO);
 	}
 	while (usc->wait_cmd_id) {
@@ -1809,9 +1826,11 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		 * data->xfer until it is done or we'll cause major confusion
 		 * in the USB stack.
 		 */
-		error = cv_timedwait(&usc->cv_msg, &sc->sc_mtx, ATHN_USB_CMD_TIMEOUT); /* Wait 1 second at most */
+		/* Wait 1 second at most */
+		error = cv_timedwait(&usc->cv_msg, &sc->sc_mtx, ATHN_USB_CMD_TIMEOUT);
 
 		if (!sc->sc_attached) {
+			printf("Returning ENXIO 2\n");
 			return (ENXIO);
 		}
 	}
@@ -1848,6 +1867,7 @@ athn_usb_wmi_xcmd(struct athn_usb_softc *usc, uint16_t cmd_id, void *ibuf,
 		    athn_usb_wmi_cmd_str(cmd_id),
 		    cmd_id);
 		error = ETIMEDOUT;
+		printf("Error would block 3\n");
 	}
 
 	/*
@@ -1897,8 +1917,11 @@ athn_usb_read(struct athn_softc *sc, uint32_t addr)
 	addr = htobe32(addr);
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_REG_READ,
 	    &addr, sizeof(addr), &val);
-	if (error != 0)
+	if (error != 0) {
+		printf("Returning 0xdeadbeef\n");
+		print_kernel_stack();
 		return (0xdeadbeef);
+	}
 
 	return (htobe32(val));
 }
@@ -3108,8 +3131,8 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 	if (__predict_false(m->m_len < sizeof(*htc)))
 		goto skip;
 	htc = mtod(m, struct ar_htc_frame_hdr *);
-	printf("htc: endpoint_id=%d, flags=%d, payload_len=%d\n",
-	    htc->endpoint_id, htc->flags, be16toh(htc->payload_len));
+//	printf("htc: endpoint_id=%d, flags=%d, payload_len=%d\n",
+//	    htc->endpoint_id, htc->flags, be16toh(htc->payload_len));
 
 	if (__predict_false(htc->endpoint_id == 0)) {
 		DPRINTF(("bad endpoint %d\n", htc->endpoint_id));
@@ -3200,7 +3223,7 @@ athn_usb_rx_frame(struct athn_usb_softc *usc, struct mbuf *m, struct mbufq *ml)
 		goto skip;
 	}
 
-	printf("ieee80211_add_rx_params succeeded, rssi=%d, nf=%d\n", rxi.c_rssi, rxi.c_nf);
+//	printf("ieee80211_add_rx_params succeeded, rssi=%d, nf=%d\n", rxi.c_rssi, rxi.c_nf);
 
 	if (mbufq_enqueue(ml, m)) {
 		printf("Unable to queue mbuf\n");
@@ -3333,11 +3356,11 @@ athn_usb_rxeof(struct athn_usb_bulk_rx_data *data, int len, struct mbufq *ml)
 			/* We have all the pktlen bytes in this xfer. */
 			memcpy(mtod(m, uint8_t *), buf, pktlen);
 
-			printf("Frame received, pktlen=%d, first 32 bytes: ", pktlen);
-			uint8_t *dbg = mtod(m, uint8_t *);
-			for(int i=0;i<min(32, pktlen);i++)
-				printf("%02x ", dbg[i]);
-			printf("\n");
+//			printf("Frame received, pktlen=%d, first 32 bytes: ", pktlen);
+//			uint8_t *dbg = mtod(m, uint8_t *);
+//			for(int i=0;i<min(32, pktlen);i++)
+//				printf("%02x ", dbg[i]);
+//			printf("\n");
 
 			athn_usb_rx_frame(usc, m, ml);
 		}
@@ -3768,6 +3791,8 @@ athn_usb_init(struct athn_softc *sc)
 	uint16_t mode;
 	int error;
 
+	sc->sc_running = 1;
+
 	/* Init host async commands ring. */
 	ATHN_LOCK(sc);
 	usc->cmdq.cur = usc->cmdq.next = usc->cmdq.queued = 0;
@@ -3781,10 +3806,19 @@ athn_usb_init(struct athn_softc *sc)
 	}
 */
 	STAILQ_CONCAT(&usc->usc_rx_inactive, &usc->usc_rx_active);
+	STAILQ_CONCAT(&usc->usc_tx_inactive, &usc->usc_tx_active);
+	STAILQ_CONCAT(&usc->usc_tx_inactive, &usc->usc_tx_pending);
 
-	/* Steal one buffer for beacons. */
-	usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
-	STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn, athn_usb_tx_data, next);
+	/* Steal one buffer for beacons.  Only do this if we don't already
+	 * own one from a previous init; otherwise we'd leak it. */
+	if (usc->tx_bcn == NULL) {
+		usc->tx_bcn = STAILQ_FIRST(&usc->usc_tx_inactive);
+		STAILQ_REMOVE(&usc->usc_tx_inactive, usc->tx_bcn,
+		    athn_usb_tx_data, next);
+	}
+
+	/* Reset ATHN_RX_INTR interrupt */
+	usbd_transfer_start(usc->usc_xfer[ATHN_RX_INTR]);
 
 	c = ic->ic_curchan;
 	extc = NULL;
@@ -3793,9 +3827,11 @@ athn_usb_init(struct athn_softc *sc)
 	/* In case a new MAC address has been configured. */
 //	IEEE80211_ADDR_COPY(ic->ic_myaddr, LLADDR(ifp->if_sadl));
 
+	printf("pre swt awake\n");
 	error = athn_set_power_awake(sc);
 	if (error != 0)
 		goto fail;
+	printf("post swt awake\n");
 
 	error = athn_usb_wmi_cmd(usc, AR_WMI_CMD_FLUSH_RECV);
 	if (error != 0)
@@ -3805,7 +3841,9 @@ athn_usb_init(struct athn_softc *sc)
 	if (error != 0)
 		goto fail;
 
+	printf("life \n");
 	ops->set_txpower(sc, c, extc);
+	printf("fe1 \n");
 
 	mode = htobe16(IEEE80211_IS_CHAN_2GHZ(c) ?
 	    AR_HTC_MODE_11NG : AR_HTC_MODE_11NA);
@@ -3823,7 +3861,9 @@ athn_usb_init(struct athn_softc *sc)
 	if (error != 0)
 		goto fail;
 
+	printf("aaaabbbbb\n");
 	athn_rx_start(sc);
+	printf("ccccc aaaabbbbb\n");
 
 	/* Create main interface on target. */
 	memset(&hvif, 0, sizeof(hvif));
@@ -3890,6 +3930,13 @@ athn_usb_init(struct athn_softc *sc)
 
 	/* Queue Rx xfers. */
 	usbd_transfer_start(usc->usc_xfer[ATHN_RX_DATA]);
+
+	/* Enable interrupts on the target.  Without this the firmware
+	 * never signals events and the device appears dead after an
+	 * ifconfig down/up cycle. */
+	error = athn_usb_wmi_cmd(usc, AR_WMI_CMD_ENABLE_INTR);
+	if (error != 0)
+		goto fail;
 
 	/* We're ready to go. */
 	sc->sc_running = 1;
@@ -3961,64 +4008,63 @@ athn_usb_stop(struct athn_softc *sc)
 
 //	ieee80211_new_state(ic, IEEE80211_S_INIT, -1);
 
+	/* Drain callouts before lock */
+	callout_drain(&sc->scan_to);
+	callout_drain(&sc->calib_to);
+
+	ATHN_LOCK(sc);
+
 	/* Wait for all async commands to complete. */
-
-	ATHN_LOCK(sc);
-	printf("Fix this later\n");
 	athn_usb_wait_async(usc);
-	ATHN_UNLOCK(sc);
 
-	ATHN_LOCK(sc);
-	callout_stop(&sc->scan_to);
-	callout_stop(&sc->calib_to);
-	ATHN_UNLOCK(sc);
+	/* Disable interrupts, drain, stop recv and flush pending actions */
+	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_DISABLE_INTR);
+	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_DRAIN_TXQ_ALL);
+	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_STOP_RECV);
+	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_FLUSH_RECV);
 
 	/* Remove all non-default nodes. */
-	ATHN_LOCK(sc);
 	for (sta_index = 1; sta_index < AR_USB_MAX_STA; sta_index++) {
 		if (usc->free_node_slots & (1 << sta_index))
 			continue;
 		(void)athn_usb_wmi_xcmd(usc, AR_WMI_CMD_NODE_REMOVE,
 		    &sta_index, sizeof(sta_index), NULL);
 	}
-	ATHN_UNLOCK(sc);
 
 	/* Remove main interface. This also invalidates our default node. */
 	memset(&hvif, 0, sizeof(hvif));
 	hvif.index = 0;
 	IEEE80211_ADDR_COPY(hvif.myaddr, ic->ic_macaddr);
-	ATHN_LOCK(sc);
 	(void)athn_usb_wmi_xcmd(usc, AR_WMI_CMD_VAP_REMOVE,
 	    &hvif, sizeof(hvif), NULL);
-	ATHN_UNLOCK(sc);
 
 	usc->free_node_slots = 0xff;
 
-	ATHN_LOCK(sc);
-	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_DISABLE_INTR);
-	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_DRAIN_TXQ_ALL);
-	(void)athn_usb_wmi_cmd(usc, AR_WMI_CMD_STOP_RECV);
-	ATHN_UNLOCK(sc);
-
-	ATHN_LOCK(sc);
+	/* Put the chip to sleep.  A single reset + PLL init + sleep is
+	 * sufficient; the previous code did a wake-in-the-middle double
+	 * reset dance that has no analog in Linux and is suspect. */
 	athn_reset(sc, 0);
 	athn_init_pll(sc, NULL);
-	athn_set_power_awake(sc);
-	athn_reset(sc, 1);
-	athn_init_pll(sc, NULL);
 	athn_set_power_sleep(sc);
+
 	ATHN_UNLOCK(sc);
 
-	/* Abort Tx/Rx. */
-	//ATHN_LOCK(sc);
+	/* Drain remaining interrupts */
 	usbd_transfer_drain(usc->usc_xfer[ATHN_TX_DATA]);
 	usbd_transfer_drain(usc->usc_xfer[ATHN_RX_DATA]);
-	//ATHN_UNLOCK(sc);
+	usbd_transfer_drain(usc->usc_xfer[ATHN_TX_INTR]);
+	usbd_transfer_drain(usc->usc_xfer[ATHN_RX_INTR]);
 
 	/* Flush Rx stream. */
 	m_freem(usc->rx_stream.m);
 	usc->rx_stream.m = NULL;
 	usc->rx_stream.left = 0;
+
+	/* Return beacon to inactive pool */
+	if (usc->tx_bcn != NULL) {
+		STAILQ_INSERT_TAIL(&usc->usc_tx_inactive, usc->tx_bcn, next);
+		usc->tx_bcn = NULL;
+	}
 
 	sc->sc_running = 0;
 	printf("Setting sc->sc_running = 0\n");
