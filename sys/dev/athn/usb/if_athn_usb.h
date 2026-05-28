@@ -561,6 +561,7 @@ struct athn_usb_softc {
 	struct usb_xfer		*usc_xfer[ATHN_N_TRANSFERS];
 	const struct firmware		*usc_firmware;
 
+	int				nvaps;
 //	STAILQ_HEAD(, athn_data)	tx_intr_queue;
 };
 
@@ -570,9 +571,5 @@ struct athn_usb_newauth_cb_arg {
 	uint16_t seq;
 };
 
-#define MTAG_ATHN_COOKIE	0
-
-struct athn_signal_tag {
-	int	rssi;
-	int	nf;
-};
+/* Taken from Linux ATH9K_HTC_MAX_VIF */
+#define ATHN_USB_MAX_VAP		2

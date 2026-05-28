@@ -944,11 +944,18 @@ static void
 athn_usb_vap_delete(struct ieee80211vap *vap)
 {
 	struct athn_vap *avp = (struct athn_vap *)vap;
+	struct ieee80211com *ic = vap->iv_ic;
+	struct athn_softc *sc = ic->ic_softc;
+	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 
 	printf("Running %s %d\n", __func__, __LINE__);
 	ieee80211_vap_detach(vap);
 	printf("Post %s %d\n", __func__, __LINE__);
 	free(avp, M_80211_VAP);
+	if (usc->nvaps <= 0)
+		usc->nvaps = 0;
+	else
+		usc->nvaps--;
 }
 
 static struct ieee80211vap *
@@ -960,6 +967,8 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 //	struct athn_softc *sc = ic->ic_softc;
 	struct athn_vap *avp;
 	struct ieee80211vap *vap;
+        struct athn_softc *sc = ic->ic_softc;
+        struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
 //	struct athn_usb_softc *usc = ic->ic_softc;
 //	struct ifnet *ifp;
 
@@ -968,6 +977,12 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 //		DEBUG_PRINF("VAP create returns null\n");
 //		return (NULL);
 //	}
+
+	if (usc->nvaps >= ATHN_USB_MAX_VAP) {
+		/* Reject the VAP */
+		device_printf(sc->sc_dev, "only 2 VAPs supported\n");
+		return (NULL);
+	}
 
 	if (opmode == IEEE80211_M_MONITOR) {
 		printf("Device is monitor mode\n");
@@ -1009,6 +1024,8 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 	/* BUS-specific additions */
 	//vap->iv_key_delete = sc->sc_key_delete;
 	//vap->iv_key_set = sc->sc_key_set;
+
+	usc->nvaps++;
 
 	return(vap);
 

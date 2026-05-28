@@ -13,6 +13,7 @@ The OpenBSD driver supports a wide range of chips, this only supports USB.
 * Reworked shutdown code
 * Replace msleep/wake with cv_wait
 * Removed constant reallocation of Tx/Rx buffers in athn_usb_init
+* Enabled 2-VAP limit, shifted WMI VAP code from init to per-vap start
 
 ## Bugs
 Device HTC initialization does not consistently start for VMs.
