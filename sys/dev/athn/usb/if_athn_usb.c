@@ -172,10 +172,12 @@ void		athn_usb_updateedca(struct ieee80211com *);
 void		athn_usb_updateedca_cb(struct athn_usb_softc *, void *);
 void		athn_usb_updateslot(struct ieee80211com *);
 void		athn_usb_updateslot_cb(struct athn_usb_softc *, void *);
-int		athn_usb_set_key(struct ieee80211vap *, const struct ieee80211_key *);
-void		athn_usb_set_key_cb(struct athn_usb_softc *, void *);
-int			athn_usb_delete_key(struct ieee80211vap *, const struct ieee80211_key *);
-void		athn_usb_delete_key_cb(struct athn_usb_softc *, void *);
+int		athn_usb_key_set(struct ieee80211vap *, const struct ieee80211_key *);
+void		athn_usb_key_set_cb(struct athn_usb_softc *, void *);
+int		    athn_usb_key_delete(struct ieee80211vap *, const struct ieee80211_key *);
+int		athn_usb_key_alloc(struct ieee80211vap *, struct ieee80211_key *,
+		    ieee80211_keyix *, ieee80211_keyix *);
+void		athn_usb_key_delete_cb(struct athn_usb_softc *, void *);
 void		athn_usb_bcneof(struct usbd_xfer *, void *);
 void		athn_usb_swba(struct athn_usb_softc *);
 void		athn_usb_tx_status(void *, struct ieee80211_node *);
@@ -1000,8 +1002,9 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 	/* override state transition machine */
 	avp->newstate = vap->iv_newstate;
 	vap->iv_newstate = athn_usb_newstate;
-//	vap->vp_set_key = athn_usb_set_key;
-//	vap->vp_delete_key = athn_usb_delete_key;
+	vap->iv_key_alloc = athn_usb_key_alloc;
+	vap->iv_key_set = athn_usb_key_set;
+	vap->iv_key_delete = athn_usb_key_delete;
 
 /*
 	vap->iv_update_beacon = ??
@@ -1017,7 +1020,7 @@ athn_usb_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit
 	vap->iv_recv_mgmt = ??
 */
 
-	ieee80211_vap_attach(vap, athn_usb_media_change, //ieee80211_media_change,
+	ieee80211_vap_attach(vap, ieee80211_media_change, //ieee80211_media_change,
 		ieee80211_media_status, mac);
 	ic->ic_opmode = opmode;
 
@@ -1062,8 +1065,8 @@ athn_usb_attachhook(device_t self)
 	}
 
 	/* We're now ready to attach the bus agnostic driver. */
-	sc->sc_key_delete = athn_usb_delete_key;
-	sc->sc_key_set = athn_usb_set_key;
+//	sc->sc_key_delete = athn_usb_delete_key;
+//	sc->sc_key_set = athn_usb_set_key;
 	sc->sc_stop = athn_usb_stop;
 	sc->sc_start = athn_usb_start;
 
@@ -2705,8 +2708,22 @@ athn_usb_updateslot_cb(struct athn_usb_softc *usc, void *arg)
 #endif
 }
 
+/*
 int
-athn_usb_set_key(struct ieee80211vap *vap, const struct ieee80211_key *k)
+athn_usb_key_alloc(struct ieee80211vap *, struct ieee80211_key *, ieee80211_keyix *,
+                            ieee80211_keyix *);
+*/
+
+int
+athn_usb_key_alloc(struct ieee80211vap *vap, struct ieee80211_key *k,
+    ieee80211_keyix *keyix, ieee80211_keyix *rxkeyix)
+{
+	printf("%s unimplemented\n", __func__);
+	return 1;
+}
+
+int
+athn_usb_key_set(struct ieee80211vap *vap, const struct ieee80211_key *k)
 {
 	printf("%s unimplemented.\n", __func__);
 	return 0;
@@ -2729,7 +2746,7 @@ athn_usb_set_key(struct ieee80211vap *vap, const struct ieee80211_key *k)
 }
 
 void
-athn_usb_set_key_cb(struct athn_usb_softc *usc, void *arg)
+athn_usb_key_set_cb(struct athn_usb_softc *usc, void *arg)
 {
 	printf("%s unimplemented.\n", __func__);
 #if 0
@@ -2755,7 +2772,7 @@ athn_usb_set_key_cb(struct athn_usb_softc *usc, void *arg)
 }
 
 int
-athn_usb_delete_key(struct ieee80211vap *vap, const struct ieee80211_key *k)
+athn_usb_key_delete(struct ieee80211vap *vap, const struct ieee80211_key *k)
 {
 	printf("%s unimplemented.\n", __func__);
 	return 0;
@@ -2774,8 +2791,9 @@ athn_usb_delete_key(struct ieee80211vap *vap, const struct ieee80211_key *k)
 #endif
 }
 
+#if 0
 void
-athn_usb_delete_key_cb(struct athn_usb_softc *usc, void *arg)
+athn_usb_key_delete(struct athn_usb_softc *usc, void *arg)
 {
 	printf("%s unimplemented.\n", __func__);
 #if 0
@@ -2790,6 +2808,7 @@ athn_usb_delete_key_cb(struct athn_usb_softc *usc, void *arg)
 	splx(s);
 #endif
 }
+#endif
 
 #ifndef IEEE80211_STA_ONLY
 void
