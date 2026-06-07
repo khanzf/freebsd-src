@@ -679,9 +679,6 @@ ar9285_cl_cal(struct athn_softc *sc, struct ieee80211_channel *c,
 void
 ar9271_load_ani(struct athn_softc *sc)
 {
-	printf("Unimplemented: %s\n", __func__);
-#if 0
-#if NATHN_USB > 0
 	/* Write ANI registers. */
 	AR_WRITE(sc, AR_PHY_DESIRED_SZ, 0x6d4000e2);
 	AR_WRITE(sc, AR_PHY_AGC_CTL1,   0x3139605e);
@@ -692,8 +689,6 @@ ar9271_load_ani(struct athn_softc *sc)
 	AR_WRITE(sc, AR_PHY_TIMING5,    0xd00a8007);
 	AR_WRITE(sc, AR_PHY_SFCORR_EXT, 0x05eea6d4);
 	AR_WRITE_BARRIER(sc);
-#endif	/* NATHN_USB */
-#endif
 }
 
 int

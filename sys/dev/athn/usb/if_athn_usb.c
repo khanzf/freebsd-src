@@ -164,8 +164,7 @@ int		athn_usb_node_set_rates(struct athn_usb_softc *,
 int		athn_usb_remove_node(struct athn_usb_softc *,
 		    struct ieee80211_node *);
 void		athn_usb_rx_enable(struct athn_softc *);
-int		athn_set_chan(struct athn_softc *, struct ieee80211_channel *,
-		    struct ieee80211_channel *);
+int		athn_set_chan(struct athn_softc *);
 int		athn_usb_switch_chan(struct athn_softc *,
 		    struct ieee80211_channel *, struct ieee80211_channel *);
 void		athn_usb_updateedca(struct ieee80211com *);
@@ -464,6 +463,7 @@ athn_usb_data_tx_callback(struct usb_xfer *xfer, usb_error_t error)
 			goto tr_setup;
 		STAILQ_REMOVE_HEAD(&usc->usc_tx_active, next);
 		STAILQ_INSERT_TAIL(&usc->usc_tx_inactive, data, next);
+		/* Fallthrough */
 	case USB_ST_SETUP:
 tr_setup:
 		data = STAILQ_FIRST(&usc->usc_tx_pending);
@@ -473,21 +473,13 @@ tr_setup:
 		}
 		STAILQ_REMOVE_HEAD(&usc->usc_tx_pending, next);
 		STAILQ_INSERT_TAIL(&usc->usc_tx_active, data, next);
-		/*
-		if (wassent == 0) {
-			printf("--- BEFORE XFER --\n");
-			printf("Length: %d\n", data->buflen);
-			print_hex(data->buf, data->buflen);
-			printf("--- AFTER  XFER --\n");
-			wassent++;
-		}
-		*/
 		usbd_xfer_set_frame_data(xfer, 0, data->buf, data->buflen);
 		usbd_transfer_submit(xfer);
 		break;
 	default: /* Error */
+		STAILQ_CONCAT(&usc->usc_tx_inactive, &usc->usc_tx_active);
 		printf("Error occured!\n");
-		break;
+		goto tr_setup;
 	}
 
 	return;
@@ -2593,10 +2585,8 @@ int
 athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
     struct ieee80211_channel *extc)
 {
-	printf("%s unimplemented.\n", __func__);
-	return 0;
-#if 0
 	struct athn_usb_softc *usc = (struct athn_usb_softc *)sc;
+//	struct ieee80211com *ic = &sc->sc_ic;
 	uint16_t mode;
 	int error;
 
@@ -2614,13 +2604,15 @@ athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 		goto reset;
 
 	/* If band or bandwidth changes, we need to do a full reset. */
-	if (c->ic_flags != sc->curchan->ic_flags ||
+#if 0 // This will never trigger, removing
+	if (c->ic_flags != ic->ic_curchan->ic_flags ||
 	    ((extc != NULL) ^ (sc->curchanext != NULL))) {
 		DPRINTFN(2, ("channel band switch\n"));
 		goto reset;
 	}
+#endif
 
-	error = athn_set_chan(sc, c, extc);
+	error = athn_set_chan(sc);
 	if (AR_SREV_9271(sc) && error == 0)
 		ar9271_load_ani(sc);
 	if (error != 0) {
@@ -2630,7 +2622,7 @@ athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 		if (error != 0)	/* Hopeless case. */
 			return (error);
 
-		error = athn_set_chan(sc, c, extc);
+		error = athn_set_chan(sc);
 		if (AR_SREV_9271(sc) && error == 0)
 			ar9271_load_ani(sc);
 		if (error != 0)
@@ -2654,7 +2646,6 @@ athn_usb_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 	/* Re-enable interrupts. */
 	error = athn_usb_wmi_cmd(usc, AR_WMI_CMD_ENABLE_INTR);
 	return (error);
-#endif
 }
 
 void
@@ -3607,7 +3598,6 @@ athn_usb_tx(struct athn_usb_softc *usc, struct ieee80211_node *ni, struct mbuf *
 //	xferlen = frm - data->buf;
 	data->buflen = frm - data->buf;
 
-	printf("Before Tx Transfer\n");
 	STAILQ_INSERT_TAIL(&usc->usc_tx_pending, data, next);
 	usbd_transfer_start(usc->usc_xfer[ATHN_TX_DATA]);
 

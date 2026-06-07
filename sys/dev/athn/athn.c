@@ -91,8 +91,8 @@ void		athn_write_serdes(struct athn_softc *,
 		    const struct athn_serdes *);
 void		athn_config_pcie(struct athn_softc *);
 void		athn_config_nonpcie(struct athn_softc *);
-void		athn_set_channel(struct ieee80211com *ic);
-void		athn_set_chan(struct ieee80211com *ic);
+void		athn_set_channel(struct ieee80211com *);
+int		athn_set_chan(struct athn_softc *);
 int		athn_switch_chan(struct athn_softc *,
 		    struct ieee80211_channel *, struct ieee80211_channel *);
 void		athn_get_delta_slope(uint32_t, uint32_t *, uint32_t *);
@@ -1009,37 +1009,34 @@ athn_set_channel(struct ieee80211com *ic)
 	struct athn_softc *sc = ic->ic_softc;
 
 	ATHN_LOCK(sc);
-	athn_set_chan(ic);
+	athn_set_chan(sc);
 	ATHN_UNLOCK(sc);
 }
 
-void
-athn_set_chan(struct ieee80211com *ic)
+int
+athn_set_chan(struct athn_softc *sc)
 {
-	struct athn_softc *sc = ic->ic_softc;
+	struct ieee80211com *ic = &sc->sc_ic;
 	struct athn_ops *ops = &sc->ops;
-	int error, qid;
 	struct ieee80211_channel *extc = NULL;
+	int error, qid;
 
 	/* Check that Tx is stopped, otherwise RF Bus grant will not work. */
 	for (qid = 0; qid < ATHN_QID_COUNT; qid++)
 		if (athn_tx_pending(sc, qid)) {
-			return;
-			//return (EBUSY);
+			return (EBUSY);
 		}
 
 	/* Request RF Bus grant. */
 	if ((error = ops->rf_bus_request(sc)) != 0) {
-		return;
-//		return (error);
+		return (error);
 	}
 
 	ops->set_phy(sc, ic->ic_curchan, extc);
 
 	/* Change the synthesizer. */
 	if ((error = ops->set_synth(sc, ic->ic_curchan, extc)) != 0) {
-		return;
-//		return (error);
+		return (error);
 	}
 
 //	sc->curchan = ic->ic_curchan;
@@ -1056,6 +1053,8 @@ athn_set_chan(struct ieee80211com *ic)
 		ops->set_delta_slope(sc, ic->ic_curchan, extc);
 
 	ops->spur_mitigate(sc, ic->ic_curchan, extc);
+
+	return (0);
 }
 
 int
@@ -1104,7 +1103,7 @@ athn_switch_chan(struct athn_softc *sc, struct ieee80211_channel *c,
 	if (error != 0)
 		goto reset;
 
-	athn_set_chan(ic);
+	athn_set_chan(sc);
 	athn_rx_start(sc);
 
 	/* Re-enable interrupts. */
