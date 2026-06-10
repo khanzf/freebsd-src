@@ -122,7 +122,7 @@ void		athn_tx_reclaim(struct athn_softc *, int);
 int		athn_tx_pending(struct athn_softc *, int);
 void		athn_stop_tx_dma(struct athn_softc *, int);
 int		athn_txtime(struct athn_softc *, int, int, u_int);
-void		athn_set_sta_timers(struct athn_softc *);
+void		athn_set_sta_timers(struct athn_softc *, struct ieee80211_node *);
 void		athn_set_hostap_timers(struct athn_softc *);
 void		athn_set_opmode(struct athn_softc *);
 void		athn_set_bss(struct athn_softc *, struct ieee80211_node *);
@@ -2247,21 +2247,21 @@ athn_init_tx_queues(struct athn_softc *sc)
 }
 
 void
-athn_set_sta_timers(struct athn_softc *sc)
+athn_set_sta_timers(struct athn_softc *sc, struct ieee80211_node *ni)
 {
-	printf("%s unimplemented...\n", __func__);
-#if 0
-	struct ieee80211com *ic = &sc->sc_ic;
+//	struct ieee80211com *ic = &sc->sc_ic;
 	uint32_t tsfhi, tsflo, tsftu, reg;
 	uint32_t intval, next_tbtt, next_dtim;
-	int dtim_period, dtim_count, rem_dtim_count;
+	//int dtim_period, dtim_count, rem_dtim_count;
+	int dtim_period, rem_dtim_count;
 
 	tsfhi = AR_READ(sc, AR_TSF_U32);
 	tsflo = AR_READ(sc, AR_TSF_L32);
 	tsftu = AR_TSF_TO_TU(tsfhi, tsflo) + AR_FUDGE;
 
 	/* Beacon interval in TU. */
-	intval = ic->ic_bss->ni_intval;
+	//intval = ic->ic_bss->ni_intval;
+	intval = ni->ni_intval;
 
 	next_tbtt = roundup(tsftu, intval);
 #ifdef notyet
@@ -2272,9 +2272,9 @@ athn_set_sta_timers(struct athn_softc *sc)
 
 #ifdef notyet
 	dtim_count = ic->ic_dtim_count;
-	if (dtim_count >= dtim_period)	/* Should not happen. */
+//	if (dtim_count >= dtim_period)	/* Should not happen. */
 #endif
-		dtim_count = 0;	/* Assume last TIM was a DTIM. */
+//		dtim_count = 0;	/* Assume last TIM was a DTIM. */
 
 	/* Compute number of remaining TIMs until next DTIM. */
 	rem_dtim_count = 0;	/* XXX */
@@ -2314,7 +2314,6 @@ athn_set_sta_timers(struct athn_softc *sc)
 	AR_WRITE(sc, AR_TSFOOR_THRESHOLD, 0x4240);
 
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 #ifndef IEEE80211_STA_ONLY
@@ -2387,15 +2386,12 @@ athn_set_opmode(struct athn_softc *sc)
 void
 athn_set_bss(struct athn_softc *sc, struct ieee80211_node *ni)
 {
-	printf("%s unimplemented...\n", __func__);
-#if 0
 	const uint8_t *bssid = ni->ni_bssid;
 
 	AR_WRITE(sc, AR_BSS_ID0, LE_READ_4(&bssid[0]));
 	AR_WRITE(sc, AR_BSS_ID1, LE_READ_2(&bssid[4]) |
 	    SM(AR_BSS_ID1_AID, IEEE80211_AID(ni->ni_associd)));
 	AR_WRITE_BARRIER(sc);
-#endif
 }
 
 void
@@ -2909,7 +2905,7 @@ athn_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		} else
 //#endif
 		{
-			athn_set_sta_timers(sc);
+			athn_set_sta_timers(sc, vap->iv_bss);
 			/* Enable beacon miss interrupts. */
 			sc->imask |= AR_IMR_BMISS;
 

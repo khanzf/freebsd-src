@@ -220,7 +220,7 @@ int		athn_set_key(struct ieee80211com *, struct ieee80211_node *,
 void		athn_delete_key(struct ieee80211com *, struct ieee80211_node *,
 		    struct ieee80211_key *);
 void		athn_rx_start(struct athn_softc *);
-void		athn_set_sta_timers(struct athn_softc *);
+void		athn_set_sta_timers(struct athn_softc *, struct ieee80211_node *);
 void		athn_set_hostap_timers(struct athn_softc *);
 void		athn_set_opmode(struct athn_softc *);
 void		athn_set_bss(struct athn_softc *, struct ieee80211_node *);
@@ -1929,11 +1929,8 @@ athn_usb_read(struct athn_softc *sc, uint32_t addr)
 	addr = htobe32(addr);
 	error = athn_usb_wmi_xcmd(usc, AR_WMI_CMD_REG_READ,
 	    &addr, sizeof(addr), &val);
-	if (error != 0) {
-		printf("Returning 0xdeadbeef\n");
-		print_kernel_stack();
+	if (error != 0)
 		return (0xdeadbeef);
-	}
 
 	return (htobe32(val));
 }
@@ -2120,7 +2117,7 @@ athn_usb_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
 		} else
 //#endif
 		{
-			athn_set_sta_timers(sc);
+			athn_set_sta_timers(sc, vap->iv_bss);
 			/* Enable beacon miss interrupts. */
 			imask = htobe32(AR_IMR_BMISS);
 
@@ -2444,19 +2441,16 @@ athn_usb_clean_nodes(void *arg, struct ieee80211_node *ni)
 int
 athn_usb_create_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 {
-	printf("%s unimplemented.\n", __func__);
-	return 0;
-#if 0
 	struct athn_node *an = (struct athn_node *)ni;
 	struct ar_htc_target_sta sta;
 	int error, sta_index;
 #ifndef IEEE80211_STA_ONLY
 	struct ieee80211com *ic = &usc->sc_sc.sc_ic;
-	struct ifnet *ifp = &ic->ic_if;
+//	struct ifnet *ifp = &ic->ic_if;
 
 	/* Firmware cannot handle more than 8 STAs. Try to make room first. */
 	if (ic->ic_opmode == IEEE80211_M_HOSTAP)
-		ieee80211_iterate_nodes(ic, athn_usb_clean_nodes, usc);
+		ieee80211_iterate_nodes(&ic->ic_sta, athn_usb_clean_nodes, usc);
 #endif
 	if (usc->free_node_slots == 0x00)
 		return ENOBUFS;
@@ -2481,21 +2475,20 @@ athn_usb_create_node(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 	usc->free_node_slots &= ~(1 << an->sta_index);
 
 #ifndef IEEE80211_STA_ONLY
+	// Why is debugging set as a softc flag rather than a C directive?
+/*	
 	if (ifp->if_flags & IFF_DEBUG)
 		printf("%s: station %u (%s) added to firmware table\n",
 		    usc->usb_dev.dv_xname, sta_index,
 		    ether_sprintf(ni->ni_macaddr));
+*/
 #endif
 	return athn_usb_node_set_rates(usc, ni);
-#endif
 }
 
 int
 athn_usb_node_set_rates(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 {
-	printf("%s unimplemented.\n", __func__);
-	return 0;
-#if 0
 	struct athn_node *an = (struct athn_node *)ni;
 	struct ar_htc_target_rate rate;
 	int i, j;
@@ -2510,17 +2503,24 @@ athn_usb_node_set_rates(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 	if (ni->ni_flags & IEEE80211_NODE_HT) {
 		rate.capflags |= htobe32(AR_RC_HT_FLAG);
 		/* Setup HT rates. */
-		for (i = 0, j = 0; i < IEEE80211_HT_NUM_MCS; i++) {
-			if (!isset(ni->ni_rxmcs, i))
-				continue;
-			if (j >= AR_HTC_RATE_MAX)
-				break;
-			rate.ht_rates.rs_rates[j++] = i;
-		}
+//		for (i = 0, j = 0; i < IEEE80211_HTRATE_MAXSIZE; i++) {
+//			if (!isset(ni->ni_rxmcs, i))
+//				continue;
+//			if (j >= AR_HTC_RATE_MAX)
+//				break;
+//			rate.ht_rates.rs_rates[j++] = i;
+//		}
+		// FreeBSD stuff
+		for (i = 0, j=0; i < ni->ni_htrates.rs_nrates && j < AR_HTC_RATE_MAX; i++)
+			rate.ht_rates.rs_rates[j++] = ni->ni_htrates.rs_rates[i];
 		rate.ht_rates.rs_nrates = j;
 
-		if (ni->ni_rxmcs[1]) /* dual-stream MIMO rates */
+		// OpenBSD Version
+//		if (ni->ni_rxmcs[1]) /* dual-stream MIMO rates */
+//			rate.capflags |= htobe32(AR_RC_DS_FLAG);
+		if (ni->ni_htrates.rs_nrates > 8)
 			rate.capflags |= htobe32(AR_RC_DS_FLAG);
+
 #ifdef notyet
 		if (ni->ni_htcaps & IEEE80211_HTCAP_CBW20_40)
 			rate.capflags |= htobe32(AR_RC_40_FLAG);
@@ -2533,7 +2533,6 @@ athn_usb_node_set_rates(struct athn_usb_softc *usc, struct ieee80211_node *ni)
 
 	return athn_usb_wmi_xcmd(usc, AR_WMI_CMD_RC_RATE_UPDATE,
 	    &rate, sizeof(rate), NULL);
-#endif
 }
 
 int
